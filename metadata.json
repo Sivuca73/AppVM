@@ -1,0 +1,6 @@
+{
+  "name": "AppVM (Vida e Ministério)",
+  "description": "Auxiliar para designações das partes da Reunião Vida e Ministério Cristão com regras dinâmicas e travas de validação.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
