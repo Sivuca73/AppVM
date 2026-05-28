@@ -9,12 +9,17 @@ import java.util.zip.ZipOutputStream
 object DocxGenerator {
     fun exportarDocx(
         context: Context,
-        prog: ProgramacaoSemana,
+        progs: List<ProgramacaoSemana>,
         publicadores: List<Publicador>
     ): File {
         val cachePath = File(context.cacheDir, "documents")
         cachePath.mkdirs()
-        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana.replace("/", "-")}.docx")
+        val fileName = if (progs.size == 1) {
+            "Programacao_Vida_Ministerio_${progs[0].semana.replace("/", "-")}.docx"
+        } else {
+            "Programacao_Completa_Vida_Ministerio.docx"
+        }
+        val file = File(cachePath, fileName)
         
         val zos = ZipOutputStream(FileOutputStream(file))
 
@@ -30,7 +35,12 @@ object DocxGenerator {
 
         // 3. word/document.xml
         zos.putNextEntry(ZipEntry("word/document.xml"))
-        zos.write(getDocumentXml(prog, publicadores).toByteArray(Charsets.UTF_8))
+        zos.write(getDocumentXml(progs, publicadores).toByteArray(Charsets.UTF_8))
+        zos.closeEntry()
+
+        // 4. word/_rels/document.xml.rels (Garante conformidade com o formato OpenXML)
+        zos.putNextEntry(ZipEntry("word/_rels/document.xml.rels"))
+        zos.write(getDocumentRelsXml().toByteArray(Charsets.UTF_8))
         zos.closeEntry()
 
         zos.close()
@@ -53,8 +63,13 @@ object DocxGenerator {
         </Relationships>
     """.trimIndent()
 
-    private fun makeRow(parte: String, designado: String, colorHex: String = "1C1B1F", isBold: Boolean = false, shadingHex: String? = null): String {
-        val shdEl = if (shadingHex != null) "<w:shd w:fill=\"$shadingHex\"/>" else ""
+    private fun getDocumentRelsXml(): String = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        </Relationships>
+    """.trimIndent()
+
+    private fun makeRow(parte: String, designado: String, colorHex: String = "1C1B1F", isBold: Boolean = false): String {
         return """
             <w:tr>
               <w:trPr>
@@ -63,17 +78,18 @@ object DocxGenerator {
               <w:tc>
                 <w:tcPr>
                   <w:tcW w:w="4200" w:type="dxa"/>
-                  $shdEl
+                  <w:shd w:fill="FFFFFF"/>
                 </w:tcPr>
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:before="60" w:after="60"/>
+                    <w:spacing w:before="80" w:after="80"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       <w:b/>
                       <w:color w:val="$colorHex"/>
-                      <w:sz w:val="24"/>
+                      <w:sz w:val="22"/>
                     </w:rPr>
                     <w:t>$parte</w:t>
                   </w:r>
@@ -82,16 +98,18 @@ object DocxGenerator {
               <w:tc>
                 <w:tcPr>
                   <w:tcW w:w="5300" w:type="dxa"/>
-                  $shdEl
+                  <w:shd w:fill="FFFFFF"/>
                 </w:tcPr>
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:before="60" w:after="60"/>
+                    <w:spacing w:before="80" w:after="80"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       ${if (isBold) "<w:b/>" else ""}
-                      <w:sz w:val="24"/>
+                      <w:sz w:val="22"/>
+                      <w:color w:val="000000"/>
                     </w:rPr>
                     <w:t>$designado</w:t>
                   </w:r>
@@ -101,7 +119,7 @@ object DocxGenerator {
         """.trimIndent()
     }
 
-    private fun makeSectionRow(sectionTitle: String, colorHex: String, shadingHex: String): String {
+    private fun makeSectionRow(sectionTitle: String, colorHex: String): String {
         return """
             <w:tr>
               <w:trPr>
@@ -111,17 +129,18 @@ object DocxGenerator {
               <w:tc>
                 <w:tcPr>
                   <w:gridSpan w:val="2"/>
-                  <w:shd w:fill="$shadingHex"/>
+                  <w:shd w:fill="FFFFFF"/>
                 </w:tcPr>
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:before="120" w:after="120"/>
+                    <w:spacing w:before="140" w:after="100"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       <w:b/>
                       <w:color w:val="$colorHex"/>
-                      <w:sz w:val="26"/>
+                      <w:sz w:val="24"/>
                     </w:rPr>
                     <w:t>$sectionTitle</w:t>
                   </w:r>
@@ -131,71 +150,78 @@ object DocxGenerator {
         """.trimIndent()
     }
 
-    private fun getDocumentXml(prog: ProgramacaoSemana, publicadores: List<Publicador>): String {
+    private fun getDocumentXml(progs: List<ProgramacaoSemana>, publicadores: List<Publicador>): String {
         fun getNome(id: Int?): String {
             return publicadores.find { it.id == id }?.nome ?: "---"
         }
 
-        val rowsHtml = StringBuilder()
+        val bodyMarkup = StringBuilder()
 
-        // 1. TRIBUNA INTRODUÇÃO
-        rowsHtml.append(makeSectionRow("TRIBUNA / INTRODUÇÃO", "004D40", "E0F2F1"))
-        rowsHtml.append(makeRow("🎙️ Presidente da Reunião", getNome(prog.presidenteId), "008080", isBold = true))
-        rowsHtml.append(makeRow("🎙️ Oração Inicial", getNome(prog.oracaoInicialId), "008080"))
+        progs.forEachIndexed { index, prog ->
+            val rowsHtml = StringBuilder()
 
-        // 2. TESOUROS
-        rowsHtml.append(makeSectionRow("TESOUROS DA PALAVRA DE DEUS", "004D40", "E0F2F1"))
-        rowsHtml.append(makeRow("🎙️ Discurso (10 min)", getNome(prog.tesourosDiscursoId), "008080"))
-        rowsHtml.append(makeRow("🎙️ Joias Espirituais (10 min)", getNome(prog.tesourosJoiasId), "008080"))
-        rowsHtml.append(makeRow("📖 Leitura da Bíblia (4 min)", getNome(prog.tesourosLeituraId), "4682B4", isBold = true))
+            // 1. TRIBUNA INTRODUÇÃO
+            rowsHtml.append(makeSectionRow("TRIBUNA / INTRODUÇÃO", "6750A4"))
+            rowsHtml.append(makeRow("🎙️ Presidente da Reunião", getNome(prog.presidenteId), "6750A4", isBold = true))
+            rowsHtml.append(makeRow("🎙️ Oração Inicial", getNome(prog.oracaoInicialId), "6750A4"))
 
-        // 3. FAÇA SEU MELHOR
-        rowsHtml.append(makeSectionRow("FAÇA SEU MELHOR NO MINISTÉRIO", "5D4037", "FFF9C4"))
-        
-        val parte1Tema = prog.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
-        rowsHtml.append(makeRow("👥 $parte1Tema", "Estudante: ${getNome(prog.estudante1ApresentadorId)}${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", "DAA520", isBold = true))
-        
-        val parte2Tema = prog.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
-        rowsHtml.append(makeRow("👥 $parte2Tema", "Estudante: ${getNome(prog.estudante2ApresentadorId)}${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", "DAA520", isBold = true))
+            // 2. TESOUROS
+            rowsHtml.append(makeSectionRow("TESOUROS DA PALAVRA DE DEUS", "00695C"))
+            rowsHtml.append(makeRow("🎙️ Discurso (10 min)", getNome(prog.tesourosDiscursoId), "00695C"))
+            rowsHtml.append(makeRow("🎙️ Joias Espirituais (10 min)", getNome(prog.tesourosJoiasId), "00695C"))
+            rowsHtml.append(makeRow("📖 Leitura da Bíblia (4 min)", getNome(prog.tesourosLeituraId), "00695C", isBold = true))
 
-        val optCount = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
-        if (optCount >= 3) {
-            val parte3Tema = prog.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
-            rowsHtml.append(makeRow("👥 $parte3Tema", "Estudante: ${getNome(prog.estudante3ApresentadorId)}${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", "DAA520", isBold = true))
-        }
-        if (optCount >= 4) {
-            val parte4Tema = prog.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
-            rowsHtml.append(makeRow("👥 $parte4Tema", "Estudante: ${getNome(prog.estudante4ApresentadorId)}${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", "DAA520", isBold = true))
-        }
+            // 3. FAÇA SEU MELHOR
+            rowsHtml.append(makeSectionRow("FAÇA SEU MELHOR NO MINISTÉRIO", "E65100"))
+            
+            val parte1Tema = prog.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
+            rowsHtml.append(makeRow("👥 $parte1Tema", "Estudante: ${getNome(prog.estudante1ApresentadorId)}${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", "E65100", isBold = true))
+            
+            val parte2Tema = prog.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
+            rowsHtml.append(makeRow("👥 $parte2Tema", "Estudante: ${getNome(prog.estudante2ApresentadorId)}${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", "E65100", isBold = true))
 
-        // 4. VIDA CRISTÃ
-        rowsHtml.append(makeSectionRow("NOSSA VIDA CRISTÃ", "B71C1C", "FFEBEE"))
-        rowsHtml.append(makeRow("💬 Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min)", getNome(prog.vidaParteLocal1Id), "8B0000"))
-        if (prog.vidaPartesQuantidade >= 2) {
-            rowsHtml.append(makeRow("💬 Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min)", getNome(prog.vidaParteLocal2Id), "8B0000"))
-        }
+            val optCount = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+            if (optCount >= 3) {
+                val parte3Tema = prog.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
+                rowsHtml.append(makeRow("👥 $parte3Tema", "Estudante: ${getNome(prog.estudante3ApresentadorId)}${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", "E65100", isBold = true))
+            }
+            if (optCount >= 4) {
+                val parte4Tema = prog.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
+                rowsHtml.append(makeRow("👥 $parte4Tema", "Estudante: ${getNome(prog.estudante4ApresentadorId)}${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", "E65100", isBold = true))
+            }
 
-        if (prog.tipoSemana != "VISITA_SC") {
-            rowsHtml.append(makeRow("💬 Estudo Bíblico (Dirigente)", getNome(prog.vidaEstudoDirigenteId), "8B0000", isBold = true))
-            rowsHtml.append(makeRow("💬 Estudo Bíblico (Leitor)", getNome(prog.vidaEstudoLeitorId), "8B0000"))
-        } else {
-            rowsHtml.append(makeRow("🚗 Discurso de Serviço (Visita CO)", prog.visitaNomeViajante, "8B0000", isBold = true))
-            rowsHtml.append(makeRow("🚗 Tema do Discurso", prog.visitaTemaDiscurso, "8B0000"))
-        }
+            // 4. VIDA CRISTÃ
+            rowsHtml.append(makeSectionRow("NOSSA VIDA CRISTÃ", "C62828"))
+            rowsHtml.append(makeRow("💬 Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min)", getNome(prog.vidaParteLocal1Id), "C62828"))
+            if (prog.vidaPartesQuantidade >= 2) {
+                rowsHtml.append(makeRow("💬 Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min)", getNome(prog.vidaParteLocal2Id), "C62828"))
+            }
 
-        rowsHtml.append(makeRow("💬 Oração Final", getNome(prog.oracaoFinalId), "8B0000"))
+            if (prog.tipoSemana != "VISITA_SC") {
+                rowsHtml.append(makeRow("💬 Estudo Bíblico (Dirigente)", getNome(prog.vidaEstudoDirigenteId), "C62828", isBold = true))
+                rowsHtml.append(makeRow("💬 Estudo Bíblico (Leitor)", getNome(prog.vidaEstudoLeitorId), "C62828"))
+            } else {
+                rowsHtml.append(makeRow("🚗 Discurso de Serviço (Visita CO)", prog.visitaNomeViajante, "C62828", isBold = true))
+                rowsHtml.append(makeRow("🚗 Tema do Discurso", prog.visitaTemaDiscurso, "C62828"))
+            }
 
-        return """
-            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-              <w:body>
+            rowsHtml.append(makeRow("💬 Oração Final", getNome(prog.oracaoFinalId), "C62828"))
+
+            val pageBr = if (index < progs.size - 1) {
+                "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"
+            } else {
+                ""
+            }
+
+            bodyMarkup.append("""
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:after="240"/>
+                    <w:spacing w:after="120"/>
                     <w:jc w:val="center"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       <w:b/>
                       <w:color w:val="6750A4"/>
                       <w:sz w:val="36"/>
@@ -205,11 +231,12 @@ object DocxGenerator {
                 </w:p>
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:after="360"/>
+                    <w:spacing w:after="240"/>
                     <w:jc w:val="center"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       <w:b/>
                       <w:color w:val="49454F"/>
                       <w:sz w:val="28"/>
@@ -223,11 +250,11 @@ object DocxGenerator {
                     <w:tblW w:w="9500" w:type="dxa"/>
                     <w:jc w:val="center"/>
                     <w:tblBorders>
-                      <w:top w:val="single" w:sz="6" w:space="0" w:color="6750A4"/>
-                      <w:bottom w:val="single" w:sz="6" w:space="0" w:color="6750A4"/>
-                      <w:left w:val="single" w:sz="6" w:space="0" w:color="6750A4"/>
-                      <w:right w:val="single" w:sz="6" w:space="0" w:color="6750A4"/>
-                      <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2D7F3"/>
+                      <w:top w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+                      <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+                      <w:left w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+                      <w:right w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+                      <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E0E0E0"/>
                       <w:insideV w:val="none"/>
                     </w:tblBorders>
                     <w:tblCellMar>
@@ -242,10 +269,11 @@ object DocxGenerator {
                 
                 <w:p>
                   <w:pPr>
-                    <w:spacing w:before="360"/>
+                    <w:spacing w:before="240" w:after="360"/>
                   </w:pPr>
                   <w:r>
                     <w:rPr>
+                      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
                       <w:i/>
                       <w:sz w:val="18"/>
                       <w:color w:val="79747E"/>
@@ -253,6 +281,15 @@ object DocxGenerator {
                     <w:t>Documento oficial emitido em tempo real pelo sistema dinâmico AppVM.</w:t>
                   </w:r>
                 </w:p>
+                $pageBr
+            """.trimIndent())
+        }
+
+        return """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+              <w:body>
+                ${bodyMarkup.toString()}
               </w:body>
             </w:document>
         """.trimIndent()

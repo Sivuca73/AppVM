@@ -165,7 +165,7 @@ data class CustomRule(
     val id: String = "",
     val nome: String = "",
     val parte: String = "",
-    val perfisExcluidos: List<PerfilPublicador> = emptyList(),
+    val parteBloqueada: String = "",
     val ativa: Boolean = true
 )
 

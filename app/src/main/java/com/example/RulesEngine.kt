@@ -393,41 +393,20 @@ object RulesEngine {
         // --- VALIDAÇÃO DE REGRAS PERSONALIZADAS ---
         regras.regrasPersonalizadas.forEach { rule ->
             if (rule.ativa) {
-                val pubId = when (rule.parte) {
-                    "presidenteId" -> programacao.presidenteId
-                    "oracaoInicialId" -> programacao.oracaoInicialId
-                    "tesourosDiscursoId" -> programacao.tesourosDiscursoId
-                    "tesourosJoiasId" -> programacao.tesourosJoiasId
-                    "tesourosLeituraId" -> programacao.tesourosLeituraId
-                    "estudante1ApresentadorId" -> programacao.estudante1ApresentadorId
-                    "estudante1AjudanteId" -> programacao.estudante1AjudanteId
-                    "estudante2ApresentadorId" -> programacao.estudante2ApresentadorId
-                    "estudante2AjudanteId" -> programacao.estudante2AjudanteId
-                    "estudante3ApresentadorId" -> programacao.estudante3ApresentadorId
-                    "estudante3AjudanteId" -> programacao.estudante3AjudanteId
-                    "estudante4ApresentadorId" -> programacao.estudante4ApresentadorId
-                    "estudante4AjudanteId" -> programacao.estudante4AjudanteId
-                    "vidaParteLocal1Id" -> programacao.vidaParteLocal1Id
-                    "vidaParteLocal2Id" -> programacao.vidaParteLocal2Id
-                    "vidaEstudoDirigenteId" -> programacao.vidaEstudoDirigenteId
-                    "vidaEstudoLeitorId" -> programacao.vidaEstudoLeitorId
-                    "oracaoFinalId" -> programacao.oracaoFinalId
-                    else -> null
-                }
+                val pubId1 = getPubIdForField(programacao, rule.parte)
+                val pubId2 = getPubIdForField(programacao, rule.parteBloqueada)
                 
-                if (pubId != null) {
-                    val pub = pMap[pubId]
+                if (pubId1 != null && pubId2 != null && pubId1 == pubId2) {
+                    val pub = pMap[pubId1]
                     if (pub != null) {
-                        if (rule.perfisExcluidos.contains(pub.perfil)) {
-                            relatorios.add(
-                                RelatorioValidacao(
-                                    tipoParte = "REGRA_PERSONALIZADA",
-                                    campo = rule.parte,
-                                    mensagem = "Regra '${rule.nome}': ${pub.nome} é ${pub.perfil.name}, mas esta regra proíbe este perfil para esta designação.",
-                                    severidade = SeveridadeValidacao.ERRO
-                                )
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "REGRA_PERSONALIZADA",
+                                campo = rule.parte,
+                                mensagem = "Regra de Impedimento '${rule.nome}': ${pub.nome} não pode ser designado(a) para '${getNameForKey(rule.parte)}' e '${getNameForKey(rule.parteBloqueada)}' na mesma semana.",
+                                severidade = SeveridadeValidacao.ERRO
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -679,12 +658,21 @@ object RulesEngine {
             var score = 0 // Menor score = melhor candidato (menos penalidade)
             val motivos = java.lang.StringBuilder()
 
-            // Filtro por regras personalizadas: se houver regra limitando perfis para este campo, aplique
+            // Filtro por regras personalizadas: impedimentos de cruzamento de partes na mesma semana
             var excluidoPorRegraRecente = false
             regras.regrasPersonalizadas.forEach { rule ->
-                if (rule.ativa && rule.parte == campo) {
-                    if (rule.perfisExcluidos.contains(pub.perfil)) {
-                        excluidoPorRegraRecente = true
+                if (rule.ativa) {
+                    if (rule.parte == campo && rule.parteBloqueada.isNotEmpty()) {
+                        val blockedId = getPubIdForField(programacao, rule.parteBloqueada)
+                        if (blockedId != null && blockedId == pub.id) {
+                            excluidoPorRegraRecente = true
+                        }
+                    }
+                    if (rule.parteBloqueada == campo && rule.parte.isNotEmpty()) {
+                        val blockedId = getPubIdForField(programacao, rule.parte)
+                        if (blockedId != null && blockedId == pub.id) {
+                            excluidoPorRegraRecente = true
+                        }
                     }
                 }
             }
@@ -803,5 +791,53 @@ object RulesEngine {
             }
         } catch(e: Exception) {}
         return 10
+    }
+
+    fun getPubIdForField(prog: ProgramacaoSemana, field: String): Int? {
+        return when (field) {
+            "presidenteId" -> prog.presidenteId
+            "oracaoInicialId" -> prog.oracaoInicialId
+            "tesourosDiscursoId" -> prog.tesourosDiscursoId
+            "tesourosJoiasId" -> prog.tesourosJoiasId
+            "tesourosLeituraId" -> prog.tesourosLeituraId
+            "estudante1ApresentadorId" -> prog.estudante1ApresentadorId
+            "estudante1AjudanteId" -> prog.estudante1AjudanteId
+            "estudante2ApresentadorId" -> prog.estudante2ApresentadorId
+            "estudante2AjudanteId" -> prog.estudante2AjudanteId
+            "estudante3ApresentadorId" -> prog.estudante3ApresentadorId
+            "estudante3AjudanteId" -> prog.estudante3AjudanteId
+            "estudante4ApresentadorId" -> prog.estudante4ApresentadorId
+            "estudante4AjudanteId" -> prog.estudante4AjudanteId
+            "vidaParteLocal1Id" -> prog.vidaParteLocal1Id
+            "vidaParteLocal2Id" -> prog.vidaParteLocal2Id
+            "vidaEstudoDirigenteId" -> prog.vidaEstudoDirigenteId
+            "vidaEstudoLeitorId" -> prog.vidaEstudoLeitorId
+            "oracaoFinalId" -> prog.oracaoFinalId
+            else -> null
+        }
+    }
+
+    private fun getNameForKey(key: String): String {
+        return when (key) {
+            "presidenteId" -> "Presidente da Reunião"
+            "oracaoInicialId" -> "Oração Inicial"
+            "tesourosDiscursoId" -> "Discurso (Tesouros)"
+            "tesourosJoiasId" -> "Joias Espirituais"
+            "tesourosLeituraId" -> "Leitura da Bíblia"
+            "estudante1ApresentadorId" -> "Estudante 1 (Apresentador)"
+            "estudante1AjudanteId" -> "Estudante 1 (Ajudante)"
+            "estudante2ApresentadorId" -> "Estudante 2 (Apresentador)"
+            "estudante2AjudanteId" -> "Estudante 2 (Ajudante)"
+            "estudante3ApresentadorId" -> "Estudante 3 (Apresentador)"
+            "estudante3AjudanteId" -> "Estudante 3 (Ajudante)"
+            "estudante4ApresentadorId" -> "Estudante 4 (Apresentador)"
+            "estudante4AjudanteId" -> "Estudante 4 (Ajudante)"
+            "vidaParteLocal1Id" -> "Parte Local 1 (Vida Cristã)"
+            "vidaParteLocal2Id" -> "Parte Local 2 (Vida Cristã)"
+            "vidaEstudoDirigenteId" -> "Estudo Bíblico (Dirigente)"
+            "vidaEstudoLeitorId" -> "Estudo Bíblico (Leitor)"
+            "oracaoFinalId" -> "Oração Final"
+            else -> key
+        }
     }
 }

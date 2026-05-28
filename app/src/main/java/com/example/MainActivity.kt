@@ -199,6 +199,7 @@ fun AppVMScreen(
     val publicadores by viewModel.publicadores.collectAsState()
     val regras by viewModel.regras.collectAsState()
     val programacao by viewModel.programacaoSemana.collectAsState()
+    val todasProgramacoes by viewModel.todasProgramacoes.collectAsState()
     val alertas by viewModel.validacaoReport.collectAsState()
     val context = LocalContext.current
 
@@ -271,6 +272,7 @@ fun AppVMScreen(
                     publicadores = publicadores,
                     regras = regras,
                     alertas = alertas,
+                    todasProgramacoes = todasProgramacoes,
                     onUpdateProg = { viewModel.updateProgramacao(it) },
                     onPopulateMock = {
                         viewModel.preencherCongregacaoExemplo()
@@ -548,6 +550,7 @@ fun AgendaEsquemaTab(
     publicadores: List<Publicador>,
     regras: PainelRegrasConfig,
     alertas: List<RelatorioValidacao>,
+    todasProgramacoes: Map<String, ProgramacaoSemana> = emptyMap(),
     onUpdateProg: ((ProgramacaoSemana) -> ProgramacaoSemana) -> Unit,
     onPopulateMock: () -> Unit,
     onWeekSelected: (String) -> Unit
@@ -1740,6 +1743,7 @@ fun AgendaEsquemaTab(
         VisualizacaoQuadroDialog(
             programacao = programacao,
             publicadores = publicadores,
+            todasProgramacoes = todasProgramacoes,
             onDismiss = { showVisualizacaoQuadro = false }
         )
     }
@@ -3049,9 +3053,9 @@ fun ConfiguracoesPainelTab(
     var showCreateDialog by remember { mutableStateOf(false) }
     var ruleNome by remember { mutableStateOf("") }
     var selectedParteKey by remember { mutableStateOf("tesourosLeituraId") }
-    var selectedPerfis by remember { mutableStateOf(setOf<PerfilPublicador>()) }
-    var ruleIntervaloStr by remember { mutableStateOf("2") }
+    var selectedParteBloqueadaKey by remember { mutableStateOf("tesourosDiscursoId") }
     var dropdownExpanded by remember { mutableStateOf(false) }
+    var dropdownBlockedExpanded by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -3130,8 +3134,7 @@ fun ConfiguracoesPainelTab(
                 onClick = {
                     ruleNome = ""
                     selectedParteKey = "tesourosLeituraId"
-                    selectedPerfis = emptySet()
-                    ruleIntervaloStr = "2"
+                    selectedParteBloqueadaKey = "tesourosDiscursoId"
                     showCreateDialog = true
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6750A4)),
@@ -3231,8 +3234,8 @@ fun ConfiguracoesPainelTab(
         // --- REGRAS PERSONALIZADAS ---
         regrasPersonalizadas.forEachIndexed { index, rule ->
             val parteLabel = partesDisponiveis.find { it.first == rule.parte }?.second ?: rule.parte
-            val perfisLabels = if (rule.perfisExcluidos.isEmpty()) "Nenhum (Todos permitidos)" else rule.perfisExcluidos.joinToString { p -> perfisDisponiveis.find { it.first == p }?.second ?: p.name }
-            val desc = "Se a parte for '$parteLabel' -> Não pode ser: [$perfisLabels]."
+            val parteBloqueadaLabel = partesDisponiveis.find { it.first == rule.parteBloqueada }?.second ?: rule.parteBloqueada
+            val desc = "Se designado para '$parteLabel' -> Não pode fazer '$parteBloqueadaLabel' na mesma semana."
             
             RuleCardItem(
                 title = rule.nome,
@@ -3384,7 +3387,7 @@ fun ConfiguracoesPainelTab(
                         color = Color(0xFF1C1B1F)
                     )
                     Text(
-                        text = "Customize critérios e restrições específicas para as designações.",
+                        text = "Evite que o mesmo publicador faça duas partes específicas na mesma reunião.",
                         fontSize = 11.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -3394,14 +3397,14 @@ fun ConfiguracoesPainelTab(
                     OutlinedTextField(
                         value = ruleNome,
                         onValueChange = { ruleNome = it },
-                        label = { Text("Nome da Regra (Ex: Filtro de Leitura)") },
+                        label = { Text("Nome da Regra (Ex: Trava Leitura + Discurso)") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Campo 2: Dropdown de Partes
+                    // Campo 2: Dropdown de Parte 1
                     Text(
                         text = "Se a parte for:",
                         style = MaterialTheme.typography.bodySmall,
@@ -3447,60 +3450,65 @@ fun ConfiguracoesPainelTab(
                                         selectedParteKey = key
                                         dropdownExpanded = false
                                     }
-                                )
+                               )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Campo 3: Restrições de Perfis (Multi-seleção - Não pode ser)
+                    // Campo 3: Dropdown de Parte 2 (Não pode ser)
                     Text(
                         text = "Não pode ser:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF6750A4)
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        perfisDisponiveis.forEach { (perfil, label) ->
-                            val isSelected = selectedPerfis.contains(perfil)
-                            Box(
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { dropdownBlockedExpanded = true },
+                            border = BorderStroke(1.dp, Color(0xFF79747E)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
                                 modifier = Modifier
-                                    .background(
-                                        color = if (isSelected) Color(0xFFFFDAD9) else Color.Transparent,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isSelected) Color(0xFFBA1A1A) else Color(0xFF79747E),
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                    .clickable {
-                                        selectedPerfis = if (isSelected) {
-                                            selectedPerfis - perfil
-                                        } else {
-                                            selectedPerfis + perfil
-                                        }
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color(0xFF410002) else Color(0xFF49454F)
+                                    text = partesDisponiveis.find { it.first == selectedParteBloqueadaKey }?.second ?: "Selecione a parte impedida...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Black
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Expandir"
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownBlockedExpanded,
+                            onDismissRequest = { dropdownBlockedExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        ) {
+                            partesDisponiveis.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        selectedParteBloqueadaKey = key
+                                        dropdownBlockedExpanded = false
+                                    }
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     // Botões de Ação do Dialog
                     Row(
@@ -3517,11 +3525,15 @@ fun ConfiguracoesPainelTab(
                                     Toast.makeText(context, "Insira um nome para a regra.", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
+                                if (selectedParteKey == selectedParteBloqueadaKey) {
+                                    Toast.makeText(context, "A parte de origem e a de destino não podem ser as mesmas.", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
                                 val novaRegra = CustomRule(
                                     id = java.util.UUID.randomUUID().toString(),
                                     nome = ruleNome,
                                     parte = selectedParteKey,
-                                    perfisExcluidos = selectedPerfis.toList(),
+                                    parteBloqueada = selectedParteBloqueadaKey,
                                     ativa = true
                                 )
                                 regrasPersonalizadas = regrasPersonalizadas + novaRegra
@@ -4143,10 +4155,16 @@ fun exportarPdfAgenda(
 fun exportarWordAgenda(
     context: android.content.Context,
     prog: ProgramacaoSemana,
-    publicadores: List<Publicador>
+    publicadores: List<Publicador>,
+    todasProgramacoes: Map<String, ProgramacaoSemana> = emptyMap()
 ) {
     try {
-        val file = DocxGenerator.exportarDocx(context, prog, publicadores)
+        val progsList = if (todasProgramacoes.isNotEmpty()) {
+            todasProgramacoes.values.sortedBy { it.semana }
+        } else {
+            listOf(prog)
+        }
+        val file = DocxGenerator.exportarDocx(context, progsList, publicadores)
         
         // Share Intent
         val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -4279,6 +4297,7 @@ fun PremiumQuadroSectionHeader(title: String, color: Color) {
 fun VisualizacaoQuadroDialog(
     programacao: ProgramacaoSemana,
     publicadores: List<Publicador>,
+    todasProgramacoes: Map<String, ProgramacaoSemana> = emptyMap(),
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -4464,7 +4483,7 @@ fun VisualizacaoQuadroDialog(
                                 FloatingActionButton(
                                     onClick = {
                                         fabExpanded = false
-                                        exportarWordAgenda(context, programacao, publicadores)
+                                        exportarWordAgenda(context, programacao, publicadores, todasProgramacoes)
                                     },
                                     containerColor = Color(0xFF0F8F46),
                                     contentColor = Color.White,
