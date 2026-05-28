@@ -418,47 +418,15 @@ object RulesEngine {
                 if (pubId != null) {
                     val pub = pMap[pubId]
                     if (pub != null) {
-                        if (rule.perfisPermitidos.isNotEmpty() && !rule.perfisPermitidos.contains(pub.perfil)) {
+                        if (rule.perfisExcluidos.contains(pub.perfil)) {
                             relatorios.add(
                                 RelatorioValidacao(
                                     tipoParte = "REGRA_PERSONALIZADA",
                                     campo = rule.parte,
-                                    mensagem = "Regra '${rule.nome}': ${pub.nome} é ${pub.perfil}, mas esta regra permite apenas: ${rule.perfisPermitidos.joinToString { it.name }}.",
+                                    mensagem = "Regra '${rule.nome}': ${pub.nome} é ${pub.perfil.name}, mas esta regra proíbe este perfil para esta designação.",
                                     severidade = SeveridadeValidacao.ERRO
                                 )
                             )
-                        }
-                        
-                        if (rule.intervaloMinimoSemanas > 0 && pub.historicoPartes.isNotEmpty()) {
-                            pub.historicoPartes.forEach { hist ->
-                                val partMatches = when (rule.parte) {
-                                    "presidenteId" -> hist.tipoParte == "PRESIDENTE"
-                                    "oracaoInicialId" -> hist.tipoParte == "ORACAO_INICIAL"
-                                    "tesourosDiscursoId" -> hist.tipoParte == "TESOUROS_DISCURSO"
-                                    "tesourosJoiasId" -> hist.tipoParte == "TESOUROS_JOIAS"
-                                    "tesourosLeituraId" -> hist.tipoParte == "TESOUROS_LEITURA"
-                                    "estudante1ApresentadorId", "estudante2ApresentadorId", "estudante3ApresentadorId", "estudante4ApresentadorId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "APRESENTADOR"
-                                    "estudante1AjudanteId", "estudante2AjudanteId", "estudante3AjudanteId", "estudante4AjudanteId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "AJUDANTE"
-                                    "vidaParteLocal1Id", "vidaParteLocal2Id" -> hist.tipoParte.contains("LOCAL")
-                                    "vidaEstudoDirigenteId" -> hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE"
-                                    "vidaEstudoLeitorId" -> hist.tipoParte == "VIDA_ESTUDO_LEITOR"
-                                    "oracaoFinalId" -> hist.tipoParte == "ORACAO_FINAL"
-                                    else -> false
-                                }
-                                if (partMatches) {
-                                    val weeksAgo = obterSemanasDistancia(programacao.semana, hist.semana)
-                                    if (weeksAgo < rule.intervaloMinimoSemanas) {
-                                        relatorios.add(
-                                            RelatorioValidacao(
-                                                tipoParte = "REGRA_PERSONALIZADA",
-                                                campo = rule.parte,
-                                                mensagem = "Regra '${rule.nome}': ${pub.nome} realizou esta parte há apenas $weeksAgo semanas (${hist.semana}). Mínimo exigido: ${rule.intervaloMinimoSemanas} semanas.",
-                                                severidade = SeveridadeValidacao.ERRO
-                                            )
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -715,7 +683,7 @@ object RulesEngine {
             var excluidoPorRegraRecente = false
             regras.regrasPersonalizadas.forEach { rule ->
                 if (rule.ativa && rule.parte == campo) {
-                    if (rule.perfisPermitidos.isNotEmpty() && !rule.perfisPermitidos.contains(pub.perfil)) {
+                    if (rule.perfisExcluidos.contains(pub.perfil)) {
                         excluidoPorRegraRecente = true
                     }
                 }
@@ -800,36 +768,7 @@ object RulesEngine {
                 }
             }
 
-            // E. Penalização/Filtro de intervalo de Regras Personalizadas
-            regras.regrasPersonalizadas.forEach { rule ->
-                if (rule.ativa && rule.parte == campo) {
-                    if (rule.intervaloMinimoSemanas > 0) {
-                        pub.historicoPartes.forEach { hist ->
-                            val partMatches = when (rule.parte) {
-                                "presidenteId" -> hist.tipoParte == "PRESIDENTE"
-                                "oracaoInicialId" -> hist.tipoParte == "ORACAO_INICIAL"
-                                "tesourosDiscursoId" -> hist.tipoParte == "TESOUROS_DISCURSO"
-                                "tesourosJoiasId" -> hist.tipoParte == "TESOUROS_JOIAS"
-                                "tesourosLeituraId" -> hist.tipoParte == "TESOUROS_LEITURA"
-                                "estudante1ApresentadorId", "estudante2ApresentadorId", "estudante3ApresentadorId", "estudante4ApresentadorId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "APRESENTADOR"
-                                "estudante1AjudanteId", "estudante2AjudanteId", "estudante3AjudanteId", "estudante4AjudanteId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "AJUDANTE"
-                                "vidaParteLocal1Id", "vidaParteLocal2Id" -> hist.tipoParte.contains("LOCAL")
-                                "vidaEstudoDirigenteId" -> hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE"
-                                "vidaEstudoLeitorId" -> hist.tipoParte == "VIDA_ESTUDO_LEITOR"
-                                "oracaoFinalId" -> hist.tipoParte == "ORACAO_FINAL"
-                                else -> false
-                            }
-                            if (partMatches) {
-                                val weeksAgo = obterSemanasDistancia(programacao.semana, hist.semana)
-                                if (weeksAgo < rule.intervaloMinimoSemanas) {
-                                    score += 150
-                                    motivos.append("Restrição '${rule.nome}': Atuou nesta parte há apenas $weeksAgo semanas. ")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
 
             // E. Distância do histórico de últimas partes em geral (quanto mais tempo livre, menor a penalidade, sugerindo rodízio saudável)
             if (pub.historicoPartes.isNotEmpty()) {

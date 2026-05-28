@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileOutputStream
 import android.content.Intent
 import androidx.core.content.FileProvider
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -3230,9 +3231,8 @@ fun ConfiguracoesPainelTab(
         // --- REGRAS PERSONALIZADAS ---
         regrasPersonalizadas.forEachIndexed { index, rule ->
             val parteLabel = partesDisponiveis.find { it.first == rule.parte }?.second ?: rule.parte
-            val perfisLabels = if (rule.perfisPermitidos.isEmpty()) "Qualquer um" else rule.perfisPermitidos.joinToString { p -> perfisDisponiveis.find { it.first == p }?.second ?: p.name }
-            val desc = "Se parte for '$parteLabel' -> Permitir apenas: [$perfisLabels]." +
-                    if (rule.intervaloMinimoSemanas > 0) " Intervalo mínimo: ${rule.intervaloMinimoSemanas} semanas." else ""
+            val perfisLabels = if (rule.perfisExcluidos.isEmpty()) "Nenhum (Todos permitidos)" else rule.perfisExcluidos.joinToString { p -> perfisDisponiveis.find { it.first == p }?.second ?: p.name }
+            val desc = "Se a parte for '$parteLabel' -> Não pode ser: [$perfisLabels]."
             
             RuleCardItem(
                 title = rule.nome,
@@ -3454,9 +3454,9 @@ fun ConfiguracoesPainelTab(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Campo 3: Restrição de Perfis (Multi-seleção)
+                    // Campo 3: Restrições de Perfis (Multi-seleção - Não pode ser)
                     Text(
-                        text = "Permitir apenas perfis espirituais:",
+                        text = "Não pode ser:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF6750A4)
@@ -3473,12 +3473,12 @@ fun ConfiguracoesPainelTab(
                             Box(
                                 modifier = Modifier
                                     .background(
-                                        color = if (isSelected) Color(0xFFEADDFF) else Color.Transparent,
+                                        color = if (isSelected) Color(0xFFFFDAD9) else Color.Transparent,
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     .border(
                                         width = 1.dp,
-                                        color = if (isSelected) Color(0xFF6750A4) else Color(0xFF79747E),
+                                        color = if (isSelected) Color(0xFFBA1A1A) else Color(0xFF79747E),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     .clickable {
@@ -3494,23 +3494,11 @@ fun ConfiguracoesPainelTab(
                                     text = label,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color(0xFF21005D) else Color(0xFF49454F)
+                                    color = if (isSelected) Color(0xFF410002) else Color(0xFF49454F)
                                 )
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Campo 4: Intervalo de semanas
-                    OutlinedTextField(
-                        value = ruleIntervaloStr,
-                        onValueChange = { ruleIntervaloStr = it },
-                        label = { Text("Intervalo mínimo livre (Semanas)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -3529,13 +3517,11 @@ fun ConfiguracoesPainelTab(
                                     Toast.makeText(context, "Insira um nome para a regra.", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val intervalo = ruleIntervaloStr.toIntOrNull() ?: 1
                                 val novaRegra = CustomRule(
                                     id = java.util.UUID.randomUUID().toString(),
                                     nome = ruleNome,
                                     parte = selectedParteKey,
-                                    perfisPermitidos = selectedPerfis.toList(),
-                                    intervaloMinimoSemanas = intervalo,
+                                    perfisExcluidos = selectedPerfis.toList(),
                                     ativa = true
                                 )
                                 regrasPersonalizadas = regrasPersonalizadas + novaRegra
@@ -3960,7 +3946,6 @@ fun exportarPdfAgenda(
 ) {
     try {
         val pdfDocument = PdfDocument()
-        // Page info: A4 size is roughly 595 x 842 points (72 points per inch)
         val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
         val page = pdfDocument.startPage(pageInfo)
         val canvas: Canvas = page.canvas
@@ -3975,118 +3960,166 @@ fun exportarPdfAgenda(
         // Helper to find names
         fun getNome(id: Int?): String = publicadores.find { it.id == id }?.nome ?: "---"
         
-        // Draw Header
-        paint.color = android.graphics.Color.parseColor("#37474F")
-        paint.textSize = 15f
-        paint.isFakeBoldText = true
-        canvas.drawText("PROGRAMAÇÃO DA REUNIÃO VIDA E MINISTÉRIO CRISTÃOS", 40f, 60f, paint)
-        
-        paint.textSize = 12f
-        paint.isFakeBoldText = false
-        canvas.drawText("Semana de: ${prog.semana}", 40f, 85f, paint)
-        
-        // Draw Presidente and Oração Inicial
-        canvas.drawText("Presidente: ${getNome(prog.presidenteId)}", 40f, 115f, paint)
-        canvas.drawText("Oração Inicial: ${getNome(prog.oracaoInicialId)}", 40f, 131f, paint)
-        
-        var y = 170f
-        
-        // Section: TESOUROS
-        paint.color = android.graphics.Color.parseColor("#34727D")
-        paint.textSize = 12f
-        paint.isFakeBoldText = true
-        canvas.drawText("TESOUROS DA PALAVRA DE DEUS", 40f, y, paint)
-        y += 5f
-        paint.strokeWidth = 2f
-        canvas.drawLine(40f, y, 555f, y, paint)
-        y += 18f
-        
-        paint.color = android.graphics.Color.BLACK
-        paint.textSize = 11f
-        paint.isFakeBoldText = false
-        canvas.drawText("• Discurso de 10 min: ${getNome(prog.tesourosDiscursoId)}", 50f, y, paint)
-        y += 16f
-        canvas.drawText("• Joias Espirituais: ${getNome(prog.tesourosJoiasId)}", 50f, y, paint)
-        y += 16f
-        canvas.drawText("• Leitura da Bíblia: ${getNome(prog.tesourosLeituraId)}", 50f, y, paint)
-        y += 30f
-        
-        // Section: FAÇA SEU MELHOR
-        paint.color = android.graphics.Color.parseColor("#BE9F67")
-        paint.textSize = 12f
-        paint.isFakeBoldText = true
-        canvas.drawText("FAÇA SEU MELHOR NO MINISTÉRIO", 40f, y, paint)
-        y += 5f
-        canvas.drawLine(40f, y, 555f, y, paint)
-        y += 18f
-        
-        paint.color = android.graphics.Color.BLACK
-        paint.textSize = 11f
-        paint.isFakeBoldText = false
-        
-        // Render students
-        val card1 = "Parte 1 (${prog.facaSeuMelhorCard1Tema}):"
-        canvas.drawText("• $card1 Estudante: ${getNome(prog.estudante1ApresentadorId)} ${if (prog.estudante1AjudanteId != null) " / Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", 50f, y, paint)
-        y += 16f
-        
-        val opt = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
-        if (opt >= 2) {
-            val card2 = "Parte 2 (${prog.facaSeuMelhorCard2Tema}):"
-            canvas.drawText("• $card2 Estudante: ${getNome(prog.estudante2ApresentadorId)} ${if (prog.estudante2AjudanteId != null) " / Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", 50f, y, paint)
-            y += 16f
+        // 1. Draw Centered Titles
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.parseColor("#6750A4")
+            textSize = 20f
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
         }
+        canvas.drawText("PROGRAMAÇÃO DA REUNIÃO", 297.5f, 55f, titlePaint)
+        
+        val subtitlePaint = Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.parseColor("#49454F")
+            textSize = 14f
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("Semana de ${prog.semana}", 297.5f, 78f, subtitlePaint)
+        
+        var currentY = 110f
+        
+        // Helpers for rows
+        fun drawSection(title: String, colorHex: String) {
+            val bgPaint = Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.FILL
+                color = android.graphics.Color.parseColor(colorHex)
+                alpha = 30 // ~12% opacity
+            }
+            val rect = android.graphics.RectF(40f, currentY - 14f, 555f, currentY + 12f)
+            canvas.drawRoundRect(rect, 6f, 6f, bgPaint)
+            
+            val textPaint = Paint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.parseColor(colorHex)
+                textSize = 10f
+                isFakeBoldText = true
+            }
+            canvas.drawText(title, 48f, currentY + 3f, textPaint)
+            currentY += 34f
+        }
+        
+        fun drawRow(emoji: String, label: String, value: String, colorHex: String) {
+            // Draw circle background
+            val circlePaint = Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.FILL
+                color = android.graphics.Color.parseColor(colorHex)
+                alpha = 25 // 10% opacity
+            }
+            canvas.drawCircle(52f, currentY - 4f, 10f, circlePaint)
+            
+            // Draw Emoji string
+            val emojiPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 10f
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText(emoji, 52f, currentY - 1f, emojiPaint)
+            
+            // Draw Label
+            val labelPaint = Paint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.parseColor("#37474F")
+                textSize = 10f
+                isFakeBoldText = true
+            }
+            
+            val displayLabel = if (label.length > 55) label.substring(0, 52) + "..." else label
+            canvas.drawText(displayLabel, 68f, currentY, labelPaint)
+            
+            // Draw Value (Right Aligned)
+            val valuePaint = Paint().apply {
+                isAntiAlias = true
+                color = if (value == "---") android.graphics.Color.GRAY else android.graphics.Color.parseColor(colorHex)
+                textSize = 11f
+                isFakeBoldText = true
+                textAlign = Paint.Align.RIGHT
+            }
+            canvas.drawText(value, 555f, currentY, valuePaint)
+            
+            // Divider
+            val divPaint = Paint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.parseColor("#EEEEEE")
+                strokeWidth = 0.5f
+            }
+            canvas.drawLine(40f, currentY + 8f, 555f, currentY + 8f, divPaint)
+            
+            currentY += 24f
+        }
+        
+        // A. INTRODUÇÃO
+        drawRow("🎙️", "Presidente da Reunião", getNome(prog.presidenteId), "#008080")
+        drawRow("🎙️", "Oração Inicial", getNome(prog.oracaoInicialId), "#008080")
+        
+        // B. TESOUROS
+        drawSection("TESOUROS DA PALAVRA DE DEUS", "#008080")
+        drawRow("🎙️", "Discurso (10 min)", getNome(prog.tesourosDiscursoId), "#008080")
+        drawRow("🎙️", "Joias Espirituais (10 min)", getNome(prog.tesourosJoiasId), "#008080")
+        drawRow("📖", "Leitura da Bíblia (4 min)", getNome(prog.tesourosLeituraId), "#4682B4")
+        
+        // C. FAÇA SEU MELHOR
+        drawSection("FAÇA SEU MELHOR NO MINISTÉRIO", "#DAA520")
+        val opt = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+        
+        val edit1Label = prog.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
+        val edit1Val = if (prog.estudante1AjudanteId != null) "${getNome(prog.estudante1ApresentadorId)} | ${getNome(prog.estudante1AjudanteId)}" else getNome(prog.estudante1ApresentadorId)
+        drawRow("👥", edit1Label, edit1Val, "#DAA520")
+        
+        val edit2Label = prog.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
+        val edit2Val = if (prog.estudante2AjudanteId != null) "${getNome(prog.estudante2ApresentadorId)} | ${getNome(prog.estudante2AjudanteId)}" else getNome(prog.estudante2ApresentadorId)
+        drawRow("👥", edit2Label, edit2Val, "#DAA520")
+        
         if (opt >= 3) {
-            val card3 = "Parte 3 (${prog.facaSeuMelhorCard3Tema}):"
-            canvas.drawText("• $card3 Estudante: ${getNome(prog.estudante3ApresentadorId)} ${if (prog.estudante3AjudanteId != null) " / Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", 50f, y, paint)
-            y += 16f
+            val edit3Label = prog.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
+            val edit3Val = if (prog.estudante3AjudanteId != null) "${getNome(prog.estudante3ApresentadorId)} | ${getNome(prog.estudante3AjudanteId)}" else getNome(prog.estudante3ApresentadorId)
+            drawRow("👥", edit3Label, edit3Val, "#DAA520")
         }
         if (opt >= 4) {
-            val card4 = "Parte 4 (${prog.facaSeuMelhorCard4Tema}):"
-            canvas.drawText("• $card4 Estudante: ${getNome(prog.estudante4ApresentadorId)} ${if (prog.estudante4AjudanteId != null) " / Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", 50f, y, paint)
-            y += 16f
+            val edit4Label = prog.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
+            val edit4Val = if (prog.estudante4AjudanteId != null) "${getNome(prog.estudante4ApresentadorId)} | ${getNome(prog.estudante4AjudanteId)}" else getNome(prog.estudante4ApresentadorId)
+            drawRow("👥", edit4Label, edit4Val, "#DAA520")
         }
-        y += 14f
         
-        // Section: VIDA CRISTÃ
-        paint.color = android.graphics.Color.parseColor("#912421")
-        paint.textSize = 12f
-        paint.isFakeBoldText = true
-        canvas.drawText("NOSSA VIDA CRISTÃ", 40f, y, paint)
-        y += 5f
-        canvas.drawLine(40f, y, 555f, y, paint)
-        y += 18f
+        // D. VIDA CRISTÃ
+        drawSection("NOSSA VIDA CRISTÃ", "#8B0000")
         
-        paint.color = android.graphics.Color.BLACK
-        paint.textSize = 11f
-        paint.isFakeBoldText = false
+        val local1Label = "Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min)${if (prog.vidaParteLocal1Tema.isNotBlank()) ": " + prog.vidaParteLocal1Tema else ""}"
+        drawRow("💬", local1Label, getNome(prog.vidaParteLocal1Id), "#8B0000")
         
-        canvas.drawText("• Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min): ${getNome(prog.vidaParteLocal1Id)}", 50f, y, paint)
-        y += 16f
         if (prog.vidaPartesQuantidade >= 2) {
-            canvas.drawText("• Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min): ${getNome(prog.vidaParteLocal2Id)}", 50f, y, paint)
-            y += 16f
+            val local2Label = "Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min)${if (prog.vidaParteLocal2Tema.isNotBlank()) ": " + prog.vidaParteLocal2Tema else ""}"
+            drawRow("💬", local2Label, getNome(prog.vidaParteLocal2Id), "#8B0000")
         }
         
         if (prog.tipoSemana != "VISITA_SC") {
-            canvas.drawText("• Estudo Bíblico (Dirigente): ${getNome(prog.vidaEstudoDirigenteId)}", 50f, y, paint)
-            y += 16f
-            canvas.drawText("• Estudo Bíblico (Leitor): ${getNome(prog.vidaEstudoLeitorId)}", 50f, y, paint)
-            y += 16f
+            drawRow("💬", "Estudo Bíblico (Dirigente)", getNome(prog.vidaEstudoDirigenteId), "#8B0000")
+            drawRow("💬", "Estudo Bíblico (Leitor)", getNome(prog.vidaEstudoLeitorId), "#8B0000")
         } else {
-            canvas.drawText("• Discurso de Serviço do Viajante SC: ${prog.visitaNomeViajante}", 50f, y, paint)
-            y += 16f
-            canvas.drawText("• Tema: ${prog.visitaTemaDiscurso}", 50f, y, paint)
-            y += 16f
+            drawRow("🚗", "Discurso de Serviço (CO)", prog.visitaNomeViajante, "#1565C0")
+            drawRow("🚗", "Tema do Discurso", prog.visitaTemaDiscurso, "#1565C0")
         }
         
-        canvas.drawText("• Oração Final: ${getNome(prog.oracaoFinalId)}", 50f, y, paint)
+        drawRow("💬", "Oração Final", getNome(prog.oracaoFinalId), "#8B0000")
+        
+        // Bottom Stamp
+        val stampPaint = Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.parseColor("#79747E")
+            textSize = 8f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("Documento oficial para o Quadro de Avisos emitido digitalmente pelo AppVM.", 297.5f, 815f, stampPaint)
         
         pdfDocument.finishPage(page)
         
-        // Write PDF file
         val cachePath = File(context.cacheDir, "documents")
         cachePath.mkdirs()
-        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana}.pdf")
+        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana.replace("/", "-")}.pdf")
         val fileOutputStream = FileOutputStream(file)
         pdfDocument.writeTo(fileOutputStream)
         pdfDocument.close()
@@ -4097,7 +4130,7 @@ fun exportarPdfAgenda(
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
             putExtra(Intent.EXTRA_STREAM, contentUri)
-            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações - Reunião ${prog.semana}")
+            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações (PDF) - Reunião ${prog.semana}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(shareIntent, "Salvar/Compartilhar PDF"))
@@ -4290,127 +4323,186 @@ fun VisualizacaoQuadroDialog(
                     Spacer(modifier = Modifier.width(36.dp))
                 }
 
-                // Document Sheet Card
-                Card(
+                // Document Sheet Area (with embedded Expanding Floating Action Button)
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFE5E5E5)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        .fillMaxWidth()
                 ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE5E5E5)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp)
+                        ) {
+                            // Header simulated paper sheet
+                            Text(
+                                text = "PROGRAMAÇÃO DA REUNIÃO",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF6750A4),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "Semana de ${programacao.semana}",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF49454F),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            
+                            Spacer(modifier = Modifier.height(14.dp))
+                            
+                            // Presidência & Introdução (🎙️ Teal)
+                            PremiumQuadroRow("🎙️", Color(0xFF008080), "Presidente da Reunião", getNome(programacao.presidenteId))
+                            PremiumQuadroRow("🎙️", Color(0xFF008080), "Oração Inicial", getNome(programacao.oracaoInicialId))
+                            
+                            // Section 1: TESOUROS (🎙️ Teal & Leitura 📖 Light Blue)
+                            PremiumQuadroSectionHeader("TESOUROS DA PALAVRA DE DEUS", Color(0xFF008080))
+                            PremiumQuadroRow("🎙️", Color(0xFF008080), "Discurso (10 min)", getNome(programacao.tesourosDiscursoId))
+                            PremiumQuadroRow("🎙️", Color(0xFF008080), "Joias Espirituais (10 min)", getNome(programacao.tesourosJoiasId))
+                            PremiumQuadroRow("📖", Color(0xFF4682B4), "Leitura da Bíblia (4 min)", getNome(programacao.tesourosLeituraId))
+                            
+                            // Section 2: FAÇA SEU MELHOR (👥 Gold)
+                            PremiumQuadroSectionHeader("FAÇA SEU MELHOR NO MINISTÉRIO", Color(0xFFDAA520))
+                            val opt = programacao.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+                            
+                            val pt1 = programacao.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
+                            PremiumQuadroEstudanteRow(pt1, getNome(programacao.estudante1ApresentadorId), getNome(programacao.estudante1AjudanteId))
+                            
+                            val pt2 = programacao.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
+                            PremiumQuadroEstudanteRow(pt2, getNome(programacao.estudante2ApresentadorId), getNome(programacao.estudante2AjudanteId))
+                            
+                            if (opt >= 3) {
+                                val pt3 = programacao.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
+                                PremiumQuadroEstudanteRow(pt3, getNome(programacao.estudante3ApresentadorId), getNome(programacao.estudante3AjudanteId))
+                            }
+                            if (opt >= 4) {
+                                val pt4 = programacao.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
+                                PremiumQuadroEstudanteRow(pt4, getNome(programacao.estudante4ApresentadorId), getNome(programacao.estudante4AjudanteId))
+                            }
+                            
+                            // Section 3: NOSSA VIDA CRISTÃ (💬 Garnet Red & Visita 🚗 Car)
+                            PremiumQuadroSectionHeader("NOSSA VIDA CRISTÃ", Color(0xFF8B0000))
+                            
+                            val local1Label = "Parte Local 1 (${programacao.vidaParteLocal1DuracaoMin} min)" + if (programacao.vidaParteLocal1Tema.isNotBlank()) ": ${programacao.vidaParteLocal1Tema}" else ""
+                            PremiumQuadroRow("💬", Color(0xFF8B0000), local1Label, getNome(programacao.vidaParteLocal1Id))
+                            
+                            if (programacao.vidaPartesQuantidade >= 2) {
+                                val local2Label = "Parte Local 2 (${programacao.vidaParteLocal2DuracaoMin} min)" + if (programacao.vidaParteLocal2Tema.isNotBlank()) ": ${programacao.vidaParteLocal2Tema}" else ""
+                                PremiumQuadroRow("💬", Color(0xFF8B0000), local2Label, getNome(programacao.vidaParteLocal2Id))
+                            }
+                            
+                            if (programacao.tipoSemana != "VISITA_SC") {
+                                PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Dirigente)", getNome(programacao.vidaEstudoDirigenteId))
+                                PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Leitor)", getNome(programacao.vidaEstudoLeitorId))
+                            } else {
+                                PremiumQuadroRow("🚗", Color(0xFF1565C0), "Discurso de Serviço (Visita CO)", programacao.visitaNomeViajante)
+                                PremiumQuadroRow("🚗", Color(0xFF1565C0), "Tema do Discurso", programacao.visitaTemaDiscurso)
+                            }
+                            
+                            PremiumQuadroRow("💬", Color(0xFF8B0000), "Oração Final", getNome(programacao.oracaoFinalId))
+                        }
+                    }
+
+                    // Bottom-Right Expanding FAB
+                    var fabExpanded by remember { mutableStateOf(false) }
+
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Header simulated paper sheet
-                        Text(
-                            text = "PROGRAMAÇÃO DA REUNIÃO",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF6750A4),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            text = "Semana de ${programacao.semana}",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF49454F),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        
-                        Spacer(modifier = Modifier.height(14.dp))
-                        
-                        // Presidência & Introdução (🎙️ Teal)
-                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Presidente da Reunião", getNome(programacao.presidenteId))
-                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Oração Inicial", getNome(programacao.oracaoInicialId))
-                        
-                        // Section 1: TESOUROS (🎙️ Teal & Leitura 📖 Light Blue)
-                        PremiumQuadroSectionHeader("TESOUROS DA PALAVRA DE DEUS", Color(0xFF008080))
-                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Discurso (10 min)", getNome(programacao.tesourosDiscursoId))
-                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Joias Espirituais (10 min)", getNome(programacao.tesourosJoiasId))
-                        PremiumQuadroRow("📖", Color(0xFF4682B4), "Leitura da Bíblia (4 min)", getNome(programacao.tesourosLeituraId))
-                        
-                        // Section 2: FAÇA SEU MELHOR (👥 Gold)
-                        PremiumQuadroSectionHeader("FAÇA SEU MELHOR NO MINISTÉRIO", Color(0xFFDAA520))
-                        val opt = programacao.facaSeuMelhorOpcao.toIntOrNull() ?: 3
-                        
-                        val pt1 = programacao.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
-                        PremiumQuadroEstudanteRow(pt1, getNome(programacao.estudante1ApresentadorId), getNome(programacao.estudante1AjudanteId))
-                        
-                        val pt2 = programacao.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
-                        PremiumQuadroEstudanteRow(pt2, getNome(programacao.estudante2ApresentadorId), getNome(programacao.estudante2AjudanteId))
-                        
-                        if (opt >= 3) {
-                            val pt3 = programacao.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
-                            PremiumQuadroEstudanteRow(pt3, getNome(programacao.estudante3ApresentadorId), getNome(programacao.estudante3AjudanteId))
-                        }
-                        if (opt >= 4) {
-                            val pt4 = programacao.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
-                            PremiumQuadroEstudanteRow(pt4, getNome(programacao.estudante4ApresentadorId), getNome(programacao.estudante4AjudanteId))
-                        }
-                        
-                        // Section 3: NOSSA VIDA CRISTÃ (💬 Garnet Red & Visita 🚗 Car)
-                        PremiumQuadroSectionHeader("NOSSA VIDA CRISTÃ", Color(0xFF8B0000))
-                        
-                        val local1Label = "Parte Local 1 (${programacao.vidaParteLocal1DuracaoMin} min)" + if (programacao.vidaParteLocal1Tema.isNotBlank()) ": ${programacao.vidaParteLocal1Tema}" else ""
-                        PremiumQuadroRow("💬", Color(0xFF8B0000), local1Label, getNome(programacao.vidaParteLocal1Id))
-                        
-                        if (programacao.vidaPartesQuantidade >= 2) {
-                            val local2Label = "Parte Local 2 (${programacao.vidaParteLocal2DuracaoMin} min)" + if (programacao.vidaParteLocal2Tema.isNotBlank()) ": ${programacao.vidaParteLocal2Tema}" else ""
-                            PremiumQuadroRow("💬", Color(0xFF8B0000), local2Label, getNome(programacao.vidaParteLocal2Id))
-                        }
-                        
-                        if (programacao.tipoSemana != "VISITA_SC") {
-                            PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Dirigente)", getNome(programacao.vidaEstudoDirigenteId))
-                            PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Leitor)", getNome(programacao.vidaEstudoLeitorId))
-                        } else {
-                            PremiumQuadroRow("🚗", Color(0xFF1565C0), "Discurso de Serviço (Visita CO)", programacao.visitaNomeViajante)
-                            PremiumQuadroRow("🚗", Color(0xFF1565C0), "Tema do Discurso", programacao.visitaTemaDiscurso)
-                        }
-                        
-                        PremiumQuadroRow("💬", Color(0xFF8B0000), "Oração Final", getNome(programacao.oracaoFinalId))
-                    }
-                }
+                        AnimatedVisibility(
+                            visible = fabExpanded,
+                            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // PDF Option Button
+                                FloatingActionButton(
+                                    onClick = {
+                                        fabExpanded = false
+                                        exportarPdfAgenda(context, programacao, publicadores)
+                                    },
+                                    containerColor = Color(0xFFB3261E),
+                                    contentColor = Color.White,
+                                    modifier = Modifier.height(44.dp),
+                                    shape = RoundedCornerShape(22.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Exportar PDF",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Exportar PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Export Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(
-                        onClick = { exportarPdfAgenda(context, programacao, publicadores) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB3261E)), // M3 Error Red for PDF
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 4.dp)
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Share, null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Exportar PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                    
-                    Button(
-                        onClick = { exportarWordAgenda(context, programacao, publicadores) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F8F46)), // Word Green
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 4.dp)
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Exportar Word (.docx)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                // Word Option Button
+                                FloatingActionButton(
+                                    onClick = {
+                                        fabExpanded = false
+                                        exportarWordAgenda(context, programacao, publicadores)
+                                    },
+                                    containerColor = Color(0xFF0F8F46),
+                                    contentColor = Color.White,
+                                    modifier = Modifier.height(44.dp),
+                                    shape = RoundedCornerShape(22.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Exportar Word (.docx)",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Exportar Word (.docx)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Main Trigger FAB
+                        FloatingActionButton(
+                            onClick = { fabExpanded = !fabExpanded },
+                            containerColor = Color(0xFF6750A4),
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (fabExpanded) Icons.Default.Close else Icons.Default.Share,
+                                contentDescription = "Expandir Opções de Exportação",
+                                modifier = Modifier.size(24.dp),
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
             }

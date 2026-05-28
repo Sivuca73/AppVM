@@ -140,50 +140,50 @@ object DocxGenerator {
 
         // 1. TRIBUNA INTRODUÇÃO
         rowsHtml.append(makeSectionRow("TRIBUNA / INTRODUÇÃO", "004D40", "E0F2F1"))
-        rowsHtml.append(makeRow("Presidente da Reunião", getNome(prog.presidenteId), "008080", isBold = true))
-        rowsHtml.append(makeRow("Oração Inicial", getNome(prog.oracaoInicialId), "008080"))
+        rowsHtml.append(makeRow("🎙️ Presidente da Reunião", getNome(prog.presidenteId), "008080", isBold = true))
+        rowsHtml.append(makeRow("🎙️ Oração Inicial", getNome(prog.oracaoInicialId), "008080"))
 
         // 2. TESOUROS
         rowsHtml.append(makeSectionRow("TESOUROS DA PALAVRA DE DEUS", "004D40", "E0F2F1"))
-        rowsHtml.append(makeRow("Discurso (10 min)", getNome(prog.tesourosDiscursoId), "008080"))
-        rowsHtml.append(makeRow("Joias Espirituais (10 min)", getNome(prog.tesourosJoiasId), "008080"))
-        rowsHtml.append(makeRow("Leitura da Bíblia (4 min)", getNome(prog.tesourosLeituraId), "4682B4", isBold = true))
+        rowsHtml.append(makeRow("🎙️ Discurso (10 min)", getNome(prog.tesourosDiscursoId), "008080"))
+        rowsHtml.append(makeRow("🎙️ Joias Espirituais (10 min)", getNome(prog.tesourosJoiasId), "008080"))
+        rowsHtml.append(makeRow("📖 Leitura da Bíblia (4 min)", getNome(prog.tesourosLeituraId), "4682B4", isBold = true))
 
         // 3. FAÇA SEU MELHOR
         rowsHtml.append(makeSectionRow("FAÇA SEU MELHOR NO MINISTÉRIO", "5D4037", "FFF9C4"))
         
         val parte1Tema = prog.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
-        rowsHtml.append(makeRow(parte1Tema, "Estudante: ${getNome(prog.estudante1ApresentadorId)}${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", "DAA520", isBold = true))
+        rowsHtml.append(makeRow("👥 $parte1Tema", "Estudante: ${getNome(prog.estudante1ApresentadorId)}${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", "DAA520", isBold = true))
         
         val parte2Tema = prog.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
-        rowsHtml.append(makeRow(parte2Tema, "Estudante: ${getNome(prog.estudante2ApresentadorId)}${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", "DAA520", isBold = true))
+        rowsHtml.append(makeRow("👥 $parte2Tema", "Estudante: ${getNome(prog.estudante2ApresentadorId)}${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", "DAA520", isBold = true))
 
         val optCount = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
         if (optCount >= 3) {
             val parte3Tema = prog.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
-            rowsHtml.append(makeRow(parte3Tema, "Estudante: ${getNome(prog.estudante3ApresentadorId)}${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", "DAA520", isBold = true))
+            rowsHtml.append(makeRow("👥 $parte3Tema", "Estudante: ${getNome(prog.estudante3ApresentadorId)}${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", "DAA520", isBold = true))
         }
         if (optCount >= 4) {
             val parte4Tema = prog.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
-            rowsHtml.append(makeRow(parte4Tema, "Estudante: ${getNome(prog.estudante4ApresentadorId)}${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", "DAA520", isBold = true))
+            rowsHtml.append(makeRow("👥 $parte4Tema", "Estudante: ${getNome(prog.estudante4ApresentadorId)}${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", "DAA520", isBold = true))
         }
 
         // 4. VIDA CRISTÃ
         rowsHtml.append(makeSectionRow("NOSSA VIDA CRISTÃ", "B71C1C", "FFEBEE"))
-        rowsHtml.append(makeRow("Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min)", getNome(prog.vidaParteLocal1Id), "8B0000"))
+        rowsHtml.append(makeRow("💬 Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min)", getNome(prog.vidaParteLocal1Id), "8B0000"))
         if (prog.vidaPartesQuantidade >= 2) {
-            rowsHtml.append(makeRow("Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min)", getNome(prog.vidaParteLocal2Id), "8B0000"))
+            rowsHtml.append(makeRow("💬 Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min)", getNome(prog.vidaParteLocal2Id), "8B0000"))
         }
 
         if (prog.tipoSemana != "VISITA_SC") {
-            rowsHtml.append(makeRow("Estudo Bíblico de Congregação (Dirigente)", getNome(prog.vidaEstudoDirigenteId), "8B0000", isBold = true))
-            rowsHtml.append(makeRow("Estudo Bíblico de Congregação (Leitor)", getNome(prog.vidaEstudoLeitorId), "8B0000"))
+            rowsHtml.append(makeRow("💬 Estudo Bíblico (Dirigente)", getNome(prog.vidaEstudoDirigenteId), "8B0000", isBold = true))
+            rowsHtml.append(makeRow("💬 Estudo Bíblico (Leitor)", getNome(prog.vidaEstudoLeitorId), "8B0000"))
         } else {
-            rowsHtml.append(makeRow("Discurso de Serviço (Visita CO)", prog.visitaNomeViajante, "8B0000", isBold = true))
-            rowsHtml.append(makeRow("Tema do Discurso", prog.visitaTemaDiscurso, "8B0000"))
+            rowsHtml.append(makeRow("🚗 Discurso de Serviço (Visita CO)", prog.visitaNomeViajante, "8B0000", isBold = true))
+            rowsHtml.append(makeRow("🚗 Tema do Discurso", prog.visitaTemaDiscurso, "8B0000"))
         }
 
-        rowsHtml.append(makeRow("Oração Final", getNome(prog.oracaoFinalId), "8B0000"))
+        rowsHtml.append(makeRow("💬 Oração Final", getNome(prog.oracaoFinalId), "8B0000"))
 
         return """
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
