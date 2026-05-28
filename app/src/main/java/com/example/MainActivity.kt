@@ -390,11 +390,12 @@ fun gerarDesignacoesAutomaticamente(
         return candidatos.firstOrNull()?.first?.id
     }
 
+    val isCustomModeSelected = p.facaSeuMelhorOpcao == "custom"
     fun getFormatoForTema(tema: String): FormatoParteEstudante {
-        return when (tema) {
-            "Discurso" -> FormatoParteEstudante.DISCURSO
-            "Explicando suas crenças" -> FormatoParteEstudante.EXPLICANDO_CRENCAS_DISCURSO
-            else -> FormatoParteEstudante.DEMONSTRACAO
+        return if (isCustomModeSelected || tema == "Discurso" || tema == "O que você diria?") {
+            FormatoParteEstudante.DISCURSO
+        } else {
+            FormatoParteEstudante.DEMONSTRACAO
         }
     }
 
@@ -1018,18 +1019,16 @@ fun AgendaEsquemaTab(
 
         val tema1Options = emptyList<String>() // Card 1 is always fixed "Iniciando conversas" and has NO dropdown
         
-        val tema2Options = listOf("Iniciando conversas", "Cultivando o interesse")
-        
-        val tema3Options = listOf(
+        val unifiedTemaOptions = listOf(
             "Iniciando conversas",
+            "Cultivando o interesse",
             "Explicando suas crenças",
             "Fazendo discípulos",
-            "Cultivando o interesse",
             "Discurso",
             "O que você diria?"
         )
-        
-        val tema4Options = listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
+
+        val isCustomModeActive = fsmOpcao == "custom"
 
         if (cardCountToRender >= 1) {
             EstudanteCardItem(
@@ -1057,10 +1056,10 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard1Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard1Tema = t, estudante1Formato = FormatoParteEstudante.DEMONSTRACAO) } },
+                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard1Tema = t, estudante1Formato = if (isCustomModeActive) FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO) } },
                 temaOptions = tema1Options,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom",
+                isCustom = isCustomModeActive,
                 titleOverride = "Parte 1"
             )
         }
@@ -1091,10 +1090,18 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard2Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard2Tema = t, estudante2Formato = FormatoParteEstudante.DEMONSTRACAO) } },
-                temaOptions = tema2Options,
+                onTemaChange = { t ->
+                    onUpdateProg { 
+                        val fmt = if (isCustomModeActive || t == "Discurso" || t == "O que você diria?") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
+                        it.copy(
+                            facaSeuMelhorCard2Tema = t,
+                            estudante2Formato = fmt
+                        )
+                    }
+                },
+                temaOptions = unifiedTemaOptions,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom",
+                isCustom = isCustomModeActive,
                 titleOverride = "Parte 2"
             )
         }
@@ -1127,16 +1134,16 @@ fun AgendaEsquemaTab(
                 tema = programacao.facaSeuMelhorCard3Tema,
                 onTemaChange = { t ->
                     onUpdateProg { 
-                        val fmt = if (t == "Discurso" || t == "O que você diria?") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
+                        val fmt = if (isCustomModeActive || t == "Discurso" || t == "O que você diria?") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
                         it.copy(
                             facaSeuMelhorCard3Tema = t,
                             estudante3Formato = fmt
                         )
                     }
                 },
-                temaOptions = tema3Options,
+                temaOptions = unifiedTemaOptions,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom",
+                isCustom = isCustomModeActive,
                 titleOverride = "Parte 3"
             )
         }
@@ -1169,16 +1176,16 @@ fun AgendaEsquemaTab(
                 tema = programacao.facaSeuMelhorCard4Tema,
                 onTemaChange = { t ->
                     onUpdateProg { 
-                        val fmt = if (t == "Discurso") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
+                        val fmt = if (isCustomModeActive || t == "Discurso" || t == "O que você diria?") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
                         it.copy(
                             facaSeuMelhorCard4Tema = t,
                             estudante4Formato = fmt
                         )
                     }
                 },
-                temaOptions = tema4Options,
+                temaOptions = unifiedTemaOptions,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom",
+                isCustom = isCustomModeActive,
                 titleOverride = "Parte 4"
             )
         }
@@ -1917,6 +1924,33 @@ fun EstudanteCardItem(
 
     val resolvedColor = if (containerColor != Color.Unspecified) containerColor else MaterialTheme.colorScheme.surface
 
+    // Determinação automática do formato e banner baseado no tema/customização
+    val isDiscurso = tema == "Discurso"
+    val isOQueVoceDiria = tema == "O que você diria?"
+    val bannerText = when {
+        isCustom || isOQueVoceDiria -> "Consideração"
+        isDiscurso -> "Discurso direto"
+        else -> "Demonstração"
+    }
+    val bannerBg = when (bannerText) {
+        "Consideração" -> Color(0xFFF3EAFF)
+        "Discurso direto" -> Color(0xFFEADDFF)
+        else -> Color(0xFFE3F2FD)
+    }
+    val bannerFg = when (bannerText) {
+        "Consideração" -> Color(0xFF6750A4)
+        "Discurso direto" -> Color(0xFF21005D)
+        else -> Color(0xFF0D47A1)
+    }
+    val requerAjudante = bannerText == "Demonstração"
+
+    // Limpar o ajudante via efeito colateral se o formato passar a não requerer ajudante
+    LaunchedEffect(requerAjudante) {
+        if (!requerAjudante && ajudanteId != null) {
+            onSelectAjudante(null)
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1937,28 +1971,26 @@ fun EstudanteCardItem(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF202124)
                 )
-                
-                // Formato Segmentado
+
+                // Banner de Formato Dinâmico Elegante (Unificado e sem submenus)
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.5f)),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(bannerBg)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    FormatoTabButton(
-                        label = "Demonst.",
-                        selected = formato == FormatoParteEstudante.DEMONSTRACAO,
-                        onClick = { onSelectFormato(FormatoParteEstudante.DEMONSTRACAO) }
-                    )
-                    FormatoTabButton(
-                        label = "Discurso",
-                        selected = formato == FormatoParteEstudante.DISCURSO,
-                        onClick = { onSelectFormato(FormatoParteEstudante.DISCURSO) }
-                    )
-                    FormatoTabButton(
-                        label = "Crenças",
-                        selected = formato == FormatoParteEstudante.EXPLICANDO_CRENCAS_DISCURSO,
-                        onClick = { onSelectFormato(FormatoParteEstudante.EXPLICANDO_CRENCAS_DISCURSO) }
+                    val bannerIcon = when (bannerText) {
+                        "Demonstração" -> "👥"
+                        "Discurso direto" -> "🗣️"
+                        "Consideração" -> "💬"
+                        else -> "📝"
+                    }
+                    Text(
+                        text = "$bannerIcon $bannerText",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = bannerFg
                     )
                 }
             }
@@ -2058,8 +2090,7 @@ fun EstudanteCardItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Campo Ajudante (Se for em formato palestra, desativa no layout)
-            val requerAjudante = formato == FormatoParteEstudante.DEMONSTRACAO
+            // Campo Ajudante
             if (requerAjudante) {
                 Text("Ajudante (Mesmo gênero ou cônjuge/parente)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF3C4043))
                 Row(
@@ -2100,14 +2131,12 @@ fun EstudanteCardItem(
                     }
                 }
             } else {
-                // Formato discurso solo
-                onSelectAjudante(null)
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f))
                 ) {
                     Text(
-                        text = "Parte em formato Solo (Discurso). Não requer ajudante.",
+                        text = "Parte em formato Solo ($bannerText). Não requer ajudante.",
                         fontSize = 11.sp,
                         color = Color(0xFF5F6368),
                         modifier = Modifier.padding(8.dp)

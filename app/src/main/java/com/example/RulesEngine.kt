@@ -586,7 +586,24 @@ object RulesEngine {
             "tesourosDiscursoId", "tesourosJoiasId" -> regras.matriz.allowedDiscursoJoias
             "tesourosLeituraId" -> regras.matriz.allowedLeituraBiblia.filter { it != PerfilPublicador.ANCIAO } // Ancião rigorosamente excluído por regra específica
             "estudanteApresentadorId" -> {
-                if (formatoEstudante == FormatoParteEstudante.DISCURSO || formatoEstudante == FormatoParteEstudante.EXPLICANDO_CRENCAS_DISCURSO) {
+                val cardNum = when {
+                    campo.contains("1") -> 1
+                    campo.contains("2") -> 2
+                    campo.contains("3") -> 3
+                    campo.contains("4") -> 4
+                    else -> 1
+                }
+                val isCardCustom = programacao.facaSeuMelhorOpcao == "custom"
+                val cardTema = when (cardNum) {
+                    1 -> programacao.facaSeuMelhorCard1Tema
+                    2 -> programacao.facaSeuMelhorCard2Tema
+                    3 -> programacao.facaSeuMelhorCard3Tema
+                    4 -> programacao.facaSeuMelhorCard4Tema
+                    else -> ""
+                }
+                if (isCardCustom || cardTema == "O que você diria?") {
+                    listOf(PerfilPublicador.ANCIAO, PerfilPublicador.SERVO_MINISTERIAL)
+                } else if (formatoEstudante == FormatoParteEstudante.DISCURSO || formatoEstudante == FormatoParteEstudante.EXPLICANDO_CRENCAS_DISCURSO) {
                     regras.matriz.allowedEstudanteDiscurso
                 } else {
                     regras.matriz.allowedEstudanteApresentador
