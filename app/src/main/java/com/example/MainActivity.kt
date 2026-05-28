@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -2946,8 +2947,78 @@ fun AddPublicadorDialog(
 }
 
 // ==========================================
-// ABA 3: PAINEL DE CONFIGURAÇÃO DE REGRAS (SISTEMA DINÂMICO)
+// ABA 3: PAINEL DE CONFIGURAÇÃO DE REGRAS (SISTEMA DINÂMICO DE REGRAS PERSONALIZADAS E EXCLUSÃO)
 // ==========================================
+@Composable
+fun RuleCardItem(
+    title: String,
+    subtitle: String,
+    isActive: Boolean,
+    onActiveChange: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    isCustom: Boolean = false
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isCustom) Color(0xFFF7F2FA) else Color.White),
+        border = BorderStroke(1.dp, if (isCustom) Color(0xFF6750A4).copy(alpha = 0.3f) else Color(0xFFEADDFF).copy(alpha = 0.8f))
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isCustom) Color(0xFFE8DEF8) else Color(0xFFECE6F0),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (isCustom) "PERSONALIZADA" else "PADRÃO",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCustom) Color(0xFF21005D) else Color(0xFF49454F)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C1B1F))
+                Text(subtitle, fontSize = 11.sp, color = Color(0xFF49454F), lineHeight = 13.sp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = isActive,
+                    onCheckedChange = onActiveChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF6750A4),
+                        uncheckedThumbColor = Color(0xFF938F99),
+                        uncheckedTrackColor = Color(0xFFE7E0EC)
+                    )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Excluir Regra",
+                        tint = Color(0xFFB3261E)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ConfiguracoesPainelTab(
     regras: PainelRegrasConfig,
@@ -2957,6 +3028,11 @@ fun ConfiguracoesPainelTab(
     var permConsecutivo by remember { mutableStateOf(regras.permitirSemanasConsecutivasTribuna) }
     var altPapeis by remember { mutableStateOf(regras.alternarPapeisEstudante) }
     var evitDupla by remember { mutableStateOf(regras.evitarDuplaEstudoRepetidaAnterior) }
+    var regraGeneroAtiva by remember { mutableStateOf(regras.regraGeneroAtiva) }
+
+    // Listas dinâmicas de regras
+    var regrasPersonalizadas by remember { mutableStateOf(regras.regrasPersonalizadas) }
+    var regrasPadraoOcultadas by remember { mutableStateOf(regras.regrasPadraoOcultadas) }
 
     // Matriz de Privilégios Dinâmica
     var mcDiscurso by remember { mutableStateOf(regras.matriz.allowedDiscursoJoias) }
@@ -2968,12 +3044,25 @@ fun ConfiguracoesPainelTab(
 
     val scrollState = rememberScrollState()
 
+    // Dialog form state
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var ruleNome by remember { mutableStateOf("") }
+    var selectedParteKey by remember { mutableStateOf("tesourosLeituraId") }
+    var selectedPerfis by remember { mutableStateOf(setOf<PerfilPublicador>()) }
+    var ruleIntervaloStr by remember { mutableStateOf("2") }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
     // Sincronizar ao carregar
     LaunchedEffect(regras) {
         permAcumulo = regras.permitirAcumulo
         permConsecutivo = regras.permitirSemanasConsecutivasTribuna
         altPapeis = regras.alternarPapeisEstudante
         evitDupla = regras.evitarDuplaEstudoRepetidaAnterior
+        regraGeneroAtiva = regras.regraGeneroAtiva
+        regrasPersonalizadas = regras.regrasPersonalizadas
+        regrasPadraoOcultadas = regras.regrasPadraoOcultadas
         mcDiscurso = regras.matriz.allowedDiscursoJoias
         mcLeitura = regras.matriz.allowedLeituraBiblia
         mcEstudante = regras.matriz.allowedEstudanteApresentador
@@ -2982,49 +3071,210 @@ fun ConfiguracoesPainelTab(
         mcLeitor = regras.matriz.allowedLeitorEstudo
     }
 
+    val partesDisponiveis = listOf(
+        "presidenteId" to "Presidente da Reunião",
+        "oracaoInicialId" to "Oração Inicial",
+        "tesourosDiscursoId" to "Discurso (Tesouros)",
+        "tesourosJoiasId" to "Joias Espirituais",
+        "tesourosLeituraId" to "Leitura da Bíblia",
+        "estudante1ApresentadorId" to "Estudante 1 (Apresentador)",
+        "estudante1AjudanteId" to "Estudante 1 (Ajudante)",
+        "estudante2ApresentadorId" to "Estudante 2 (Apresentador)",
+        "estudante2AjudanteId" to "Estudante 2 (Ajudante)",
+        "estudante3ApresentadorId" to "Estudante 3 (Apresentador)",
+        "estudante3AjudanteId" to "Estudante 3 (Ajudante)",
+        "estudante4ApresentadorId" to "Estudante 4 (Apresentador)",
+        "estudante4AjudanteId" to "Estudante 4 (Ajudante)",
+        "vidaParteLocal1Id" to "Parte Local 1 (Vida Cristã)",
+        "vidaParteLocal2Id" to "Parte Local 2 (Vida Cristã)",
+        "vidaEstudoDirigenteId" to "Estudo Bíblico (Dirigente)",
+        "vidaEstudoLeitorId" to "Estudo Bíblico (Leitor)",
+        "oracaoFinalId" to "Oração Final"
+    )
+
+    val perfisDisponiveis = listOf(
+        PerfilPublicador.ANCIAO to "Ancião",
+        PerfilPublicador.SERVO_MINISTERIAL to "Servo Ministerial",
+        PerfilPublicador.IRMAO_BATIZADO to "Irmão Batizado",
+        PerfilPublicador.IRMAO_NAO_BATIZADO to "Irmão Não Batizado",
+        PerfilPublicador.IRMA to "Irmã"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(12.dp)
             .verticalScroll(scrollState)
     ) {
+        // --- CABEÇALHO & BOTÃO DE NOVA REGRA ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Controle das Regras de Negócio",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1C1B1F)
+                )
+                Text(
+                    text = "Toggles avançados, exclusão e regras personalizadas.",
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+            }
+            Button(
+                onClick = {
+                    ruleNome = ""
+                    selectedParteKey = "tesourosLeituraId"
+                    selectedPerfis = emptySet()
+                    ruleIntervaloStr = "2"
+                    showCreateDialog = true
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6750A4)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Criar Regra", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // --- SEÇÃO 1: REGRAS EXISTENTES ---
         Text(
-            text = "Parâmetros do Distribuidor & Toggles",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            text = "Lista de Regras Ativas",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF6750A4)
         )
-        Text("Ative ou desative travas em tempo real.", fontSize = 11.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(6.dp))
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // 1. Regra de Acúmulo
+        if (!regrasPadraoOcultadas.contains("std_acumulo")) {
+            RuleCardItem(
+                title = "Regra de Acúmulo Saudável",
+                subtitle = "Limita que o mesmo publicador faça mais de uma parte na mesma noite.",
+                isActive = !permAcumulo,
+                onActiveChange = { permAcumulo = !it },
+                onDelete = {
+                    regrasPadraoOcultadas = regrasPadraoOcultadas + "std_acumulo"
+                    Toast.makeText(context, "Regra de acúmulo desativada e excluída.", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
 
-        // Chaves de Regras
-        ConfigToggleItem(
-            title = "Permitir Acúmulo de Partes na Mesma Noite",
-            subtitle = "Ex: Irmão comum faz Leitura + Leitor do Estudo na mesma noite.",
-            checked = permAcumulo,
-            onCheckedChange = { permAcumulo = it }
-        )
+        // 2. Regra de Consecutivas na Tribuna
+        if (!regrasPadraoOcultadas.contains("std_consecutivo")) {
+            RuleCardItem(
+                title = "Semana Consecutiva na Tribuna",
+                subtitle = "Evita que anciãos/servos sejam escalados de maneira consecutiva.",
+                isActive = !permConsecutivo,
+                onActiveChange = { permConsecutivo = !it },
+                onDelete = {
+                    regrasPadraoOcultadas = regrasPadraoOcultadas + "std_consecutivo"
+                    Toast.makeText(context, "Regra de tribuna consecutiva excluída.", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
 
-        ConfigToggleItem(
-            title = "Permitir consecutivas na Tribuna",
-            subtitle = "Anciãos e Servos podem atuar em semanas seguidas.",
-            checked = permConsecutivo,
-            onCheckedChange = { permConsecutivo = it }
-        )
+        // 3. Regra de Alternância
+        if (!regrasPadraoOcultadas.contains("std_alternancia")) {
+            RuleCardItem(
+                title = "Alternância de Trabalho de Estudante",
+                subtitle = "Prioriza alternar quem foi Apresentador para ser Ajudante na reunião seguinte.",
+                isActive = altPapeis,
+                onActiveChange = { altPapeis = it },
+                onDelete = {
+                    regrasPadraoOcultadas = regrasPadraoOcultadas + "std_alternancia"
+                    Toast.makeText(context, "Regra de alternância excluída.", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
 
-        ConfigToggleItem(
-            title = "Alternar Papéis de Estudante (Dono ↔ Ajudante)",
-            subtitle = "Sugerir quem foi Apresentador para ser Ajudante na seguinte.",
-            checked = altPapeis,
-            onCheckedChange = { altPapeis = it }
-        )
+        // 4. Regra de Dupla
+        if (!regrasPadraoOcultadas.contains("std_dupla")) {
+            RuleCardItem(
+                title = "Dupla de Estudo Saudável",
+                subtitle = "Evita repetir a relação Dirigente + Leitor do estudo da semana anterior.",
+                isActive = evitDupla,
+                onActiveChange = { evitDupla = it },
+                onDelete = {
+                    regrasPadraoOcultadas = regrasPadraoOcultadas + "std_dupla"
+                    Toast.makeText(context, "Regra de dupla excluída.", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
 
-        ConfigToggleItem(
-            title = "Evitar Dupla de Estudo Repetida",
-            subtitle = "Evitar o repeteco imediato da relação Dirigente + Leitor da semana anterior.",
-            checked = evitDupla,
-            onCheckedChange = { evitDupla = it }
-        )
+        // 5. Regra de Gênero
+        if (!regrasPadraoOcultadas.contains("std_genero")) {
+            RuleCardItem(
+                title = "Gênero Uniforme de Estudantes/Ajudantes",
+                subtitle = "Exige que o ajudante seja do mesmo gênero do estudante (isenta parentesco próximo).",
+                isActive = regraGeneroAtiva,
+                onActiveChange = { regraGeneroAtiva = it },
+                onDelete = {
+                    regrasPadraoOcultadas = regrasPadraoOcultadas + "std_genero"
+                    Toast.makeText(context, "Regra de gênero excluída.", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+
+        // --- REGRAS PERSONALIZADAS ---
+        regrasPersonalizadas.forEachIndexed { index, rule ->
+            val parteLabel = partesDisponiveis.find { it.first == rule.parte }?.second ?: rule.parte
+            val perfisLabels = if (rule.perfisPermitidos.isEmpty()) "Qualquer um" else rule.perfisPermitidos.joinToString { p -> perfisDisponiveis.find { it.first == p }?.second ?: p.name }
+            val desc = "Se parte for '$parteLabel' -> Permitir apenas: [$perfisLabels]." +
+                    if (rule.intervaloMinimoSemanas > 0) " Intervalo mínimo: ${rule.intervaloMinimoSemanas} semanas." else ""
+            
+            RuleCardItem(
+                title = rule.nome,
+                subtitle = desc,
+                isActive = rule.ativa,
+                onActiveChange = { checked ->
+                    regrasPersonalizadas = regrasPersonalizadas.toMutableList().apply {
+                        this[index] = rule.copy(ativa = checked)
+                    }
+                },
+                onDelete = {
+                    regrasPersonalizadas = regrasPersonalizadas.toMutableList().apply {
+                        removeAt(index)
+                    }
+                    Toast.makeText(context, "Regra personalizada excluída.", Toast.LENGTH_SHORT).show()
+                },
+                isCustom = true
+            )
+        }
+
+        // Se houver regras padrão ocultadas, exibe botão de restauração
+        if (regrasPadraoOcultadas.isNotEmpty()) {
+            OutlinedButton(
+                onClick = {
+                    regrasPadraoOcultadas = emptyList()
+                    Toast.makeText(context, "Regras padrão restauradas!", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6750A4))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Restaurar Regras Padrão Excluídas", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
         Divider()
@@ -3032,9 +3282,10 @@ fun ConfiguracoesPainelTab(
 
         // --- GESTÃO DINÂMICA DA MATRIZ DE PERFIS ---
         Text(
-            text = "Matriz de Privilégios (Mapeamento Dinâmico)",
+            text = "Matriz de Privilégios (Mapeamento Base)",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1C1B1F)
         )
         Text("Gerencie quais perfis espirituais são válidos por parte da reunião. Se desativado, gera erros.", fontSize = 11.sp, color = Color.Gray)
 
@@ -3093,16 +3344,212 @@ fun ConfiguracoesPainelTab(
                             allowedEstudanteDiscurso = mcEstudanteDisc,
                             allowedDirigenteEstudo = mcDirigente,
                             allowedLeitorEstudo = mcLeitor
-                        )
+                        ),
+                        regrasPersonalizadas = regrasPersonalizadas,
+                        regrasPadraoOcultadas = regrasPadraoOcultadas,
+                        regraGeneroAtiva = regraGeneroAtiva
                     )
                 )
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6750A4)),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("SALVAR CONFIGURAÇÃO DAS REGRAS", fontWeight = FontWeight.Bold)
+            Text("SALVAR CONFIGURAÇÃO DAS REGRAS", fontWeight = FontWeight.Bold, color = Color.White)
+        }
+    }
+
+    // --- DIALOG DE CRIAR REGRA PERSONALIZADA ---
+    if (showCreateDialog) {
+        Dialog(onDismissRequest = { showCreateDialog = false }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Nova Regra Personalizada",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1C1B1F)
+                    )
+                    Text(
+                        text = "Customize critérios e restrições específicas para as designações.",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    // Campo 1: Nome
+                    OutlinedTextField(
+                        value = ruleNome,
+                        onValueChange = { ruleNome = it },
+                        label = { Text("Nome da Regra (Ex: Filtro de Leitura)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Campo 2: Dropdown de Partes
+                    Text(
+                        text = "Se a parte for:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF6750A4)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { dropdownExpanded = true },
+                            border = BorderStroke(1.dp, Color(0xFF79747E)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = partesDisponiveis.find { it.first == selectedParteKey }?.second ?: "Selecione a parte...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Black
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Expandir"
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        ) {
+                            partesDisponiveis.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        selectedParteKey = key
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Campo 3: Restrição de Perfis (Multi-seleção)
+                    Text(
+                        text = "Permitir apenas perfis espirituais:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF6750A4)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        perfisDisponiveis.forEach { (perfil, label) ->
+                            val isSelected = selectedPerfis.contains(perfil)
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = if (isSelected) Color(0xFFEADDFF) else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) Color(0xFF6750A4) else Color(0xFF79747E),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable {
+                                        selectedPerfis = if (isSelected) {
+                                            selectedPerfis - perfil
+                                        } else {
+                                            selectedPerfis + perfil
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color(0xFF21005D) else Color(0xFF49454F)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Campo 4: Intervalo de semanas
+                    OutlinedTextField(
+                        value = ruleIntervaloStr,
+                        onValueChange = { ruleIntervaloStr = it },
+                        label = { Text("Intervalo mínimo livre (Semanas)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Botões de Ação do Dialog
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showCreateDialog = false }) {
+                            Text("Fechar")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (ruleNome.isBlank()) {
+                                    Toast.makeText(context, "Insira um nome para a regra.", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                val intervalo = ruleIntervaloStr.toIntOrNull() ?: 1
+                                val novaRegra = CustomRule(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    nome = ruleNome,
+                                    parte = selectedParteKey,
+                                    perfisPermitidos = selectedPerfis.toList(),
+                                    intervaloMinimoSemanas = intervalo,
+                                    ativa = true
+                                )
+                                regrasPersonalizadas = regrasPersonalizadas + novaRegra
+                                showCreateDialog = false
+                                Toast.makeText(context, "Regra personalizada criada!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6750A4)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Adicionar Regra")
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -3666,80 +4113,132 @@ fun exportarWordAgenda(
     publicadores: List<Publicador>
 ) {
     try {
-        fun getNome(id: Int?): String = publicadores.find { it.id == id }?.nome ?: "---"
-        
-        val htmlContent = """
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-            <head>
-                <meta charset="utf-8">
-                <title>Programação da Reunião Vida e Ministério</title>
-                <style>
-                    body { font-family: 'Calibri', 'Arial', sans-serif; color: #333333; }
-                    h1 { color: #37474F; font-size: 16pt; margin-bottom: 5px; }
-                    .semana { font-size: 11pt; color: #555555; margin-bottom: 20px; font-weight: bold; }
-                    .section-title { font-size: 13pt; font-weight: bold; padding: 4px; margin-top: 15px; border-bottom: 2px solid; }
-                    .tesouros { color: #34727D; border-color: #34727D; }
-                    .facamelhor { color: #BE9F67; border-color: #BE9F67; }
-                    .vidacrista { color: #912421; border-color: #912421; }
-                    .item { font-size: 11pt; margin: 8px 0; padding-left: 10px; }
-                    .bold { font-weight: bold; }
-                </style>
-            </head>
-            <body>
-                <h1>PROGRAMAÇÃO DA REUNIÃO VIDA E MINISTÉRIO CRISTÃOS</h1>
-                <div class="semana">Semana de: ${prog.semana}</div>
-                
-                <div class="item"><span class="bold">Presidente:</span> ${getNome(prog.presidenteId)}</div>
-                <div class="item"><span class="bold">Oração Inicial:</span> ${getNome(prog.oracaoInicialId)}</div>
-                
-                <div class="section-title tesouros">TESOUROS DA PALAVRA DE DEUS</div>
-                <div class="item"><span class="bold">Discurso de 10 min:</span> ${getNome(prog.tesourosDiscursoId)}</div>
-                <div class="item"><span class="bold">Joias Espirituais:</span> ${getNome(prog.tesourosJoiasId)}</div>
-                <div class="item"><span class="bold">Leitura da Bíblia:</span> ${getNome(prog.tesourosLeituraId)}</div>
-                
-                <div class="section-title facamelhor">FAÇA SEU MELHOR NO MINISTÉRIO</div>
-                <div class="item"><span class="bold">Parte 1 (${prog.facaSeuMelhorCard1Tema}):</span> Estudante: ${getNome(prog.estudante1ApresentadorId)} ${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}</div>
-                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 2) """<div class="item"><span class="bold">Parte 2 (${prog.facaSeuMelhorCard2Tema}):</span> Estudante: ${getNome(prog.estudante2ApresentadorId)} ${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}</div>""" else ""}
-                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 3) """<div class="item"><span class="bold">Parte 3 (${prog.facaSeuMelhorCard3Tema}):</span> Estudante: ${getNome(prog.estudante3ApresentadorId)} ${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}</div>""" else ""}
-                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 4) """<div class="item"><span class="bold">Parte 4 (${prog.facaSeuMelhorCard4Tema}):</span> Estudante: ${getNome(prog.estudante4ApresentadorId)} ${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}</div>""" else ""}
-
-                <div class="section-title vidacrista">NOSSA VIDA CRISTÃ</div>
-                <div class="item"><span class="bold">Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min):</span> ${getNome(prog.vidaParteLocal1Id)}</div>
-                ${if (prog.vidaPartesQuantidade >= 2) """<div class="item"><span class="bold">Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min):</span> ${getNome(prog.vidaParteLocal2Id)}</div>""" else ""}
-                
-                ${if (prog.tipoSemana != "VISITA_SC") """
-                    <div class="item"><span class="bold">Estudo Bíblico de Congregação (Dirigente):</span> ${getNome(prog.vidaEstudoDirigenteId)}</div>
-                    <div class="item"><span class="bold">Estudo Bíblico de Congregação (Leitor):</span> ${getNome(prog.vidaEstudoLeitorId)}</div>
-                """ else """
-                    <div class="item"><span class="bold">Discurso de Serviço - Viajante:</span> ${prog.visitaNomeViajante}</div>
-                    <div class="item"><span class="bold">Tema:</span> ${prog.visitaTemaDiscurso}</div>
-                """}
-                
-                <div class="item"><span class="bold">Oração Final:</span> ${getNome(prog.oracaoFinalId)}</div>
-            </body>
-            </html>
-        """.trimIndent()
-        
-        // Write .doc file (Word reads HTML seamlessly if extension is .doc/.docx)
-        val cachePath = File(context.cacheDir, "documents")
-        cachePath.mkdirs()
-        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana}.doc")
-        val fileOutputStream = FileOutputStream(file)
-        fileOutputStream.write(htmlContent.toByteArray(Charsets.UTF_8))
-        fileOutputStream.close()
+        val file = DocxGenerator.exportarDocx(context, prog, publicadores)
         
         // Share Intent
         val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/msword"
+            type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             putExtra(Intent.EXTRA_STREAM, contentUri)
-            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações (Word DOC) - Reunião ${prog.semana}")
+            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações (Word DOCX) - Reunião ${prog.semana}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(shareIntent, "Salvar/Compartilhar Word Document"))
+        context.startActivity(Intent.createChooser(shareIntent, "Salvar/Compartilhar Word Document (.docx)"))
     } catch(e: Exception) {
         e.printStackTrace()
-        Toast.makeText(context, "Erro ao gerar arquivo Word: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Erro ao gerar arquivo Word (.docx): ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+fun PremiumQuadroRow(
+    iconEmoji: String,
+    iconColor: Color,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Balão colorido ao redor do emoji
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(color = iconColor.copy(alpha = 0.1f), shape = CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = iconEmoji, fontSize = 16.sp)
+        }
+        
+        Spacer(modifier = Modifier.width(10.dp))
+        
+        Column(modifier = Modifier.weight(1.3f)) {
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF37474F)
+            )
+        }
+        
+        Column(modifier = Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
+            Text(
+                text = value,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (value != "---") iconColor else Color.Gray
+            )
+        }
+    }
+    Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
+}
+
+@Composable
+fun PremiumQuadroEstudanteRow(
+    nomeAmigavel: String,
+    estudante: String,
+    ajudante: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(color = Color(0xFFDAA520).copy(alpha = 0.1f), shape = CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = "👥", fontSize = 16.sp)
+        }
+        
+        Spacer(modifier = Modifier.width(10.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = nomeAmigavel,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF37474F)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row {
+                Text(text = "Estudante: ", fontSize = 11.sp, color = Color.Gray)
+                Text(text = estudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDAA520))
+            }
+            if (ajudante.isNotBlank() && ajudante != "---") {
+                Spacer(modifier = Modifier.height(1.dp))
+                Row {
+                    Text(text = "Ajudante: ", fontSize = 11.sp, color = Color.Gray)
+                    Text(text = ajudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDAA520))
+                }
+            }
+        }
+    }
+    Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
+}
+
+@Composable
+fun PremiumQuadroSectionHeader(title: String, color: Color) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp)) {
+        Box(
+            modifier = Modifier
+                .background(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = color,
+                letterSpacing = 1.sp
+            )
+        }
     }
 }
 
@@ -3759,21 +4258,21 @@ fun VisualizacaoQuadroDialog(
         Card(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 16.dp, horizontal = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .padding(vertical = 12.dp, horizontal = 4.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                // Barra de Ações (Topo)
+                // Top header bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -3784,122 +4283,111 @@ fun VisualizacaoQuadroDialog(
                     Text(
                         text = "Folha do Quadro",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF37474F)
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1C1B1F)
                     )
                     
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(36.dp))
                 }
 
-                // Corpo da Programação (Semelhante a folha física impressa)
-                Column(
+                // Document Sheet Card
+                Card(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
-                        .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
-                        .background(Color.White)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFE5E5E5)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    // TÍTULO DA REUNIÃO (PADRÃO SALA DO REINO)
-                    Text(
-                        text = "PROGRAMAÇÃO DA REUNIÃO",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "NOSSA VIDA E MINISTÉRIO CRISTÃO",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF263238),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    Spacer(modifier = Modifier.height(10.dp))
-                    
-                    // Semana da Reunião
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFECEFF1))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp)
                     ) {
+                        // Header simulated paper sheet
                         Text(
-                            text = "SEMANA DE: ${programacao.semana}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF37474F)
+                            text = "PROGRAMAÇÃO DA REUNIÃO",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF6750A4),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        Text(
+                            text = "Semana de ${programacao.semana}",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF49454F),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(14.dp))
+                        
+                        // Presidência & Introdução (🎙️ Teal)
+                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Presidente da Reunião", getNome(programacao.presidenteId))
+                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Oração Inicial", getNome(programacao.oracaoInicialId))
+                        
+                        // Section 1: TESOUROS (🎙️ Teal & Leitura 📖 Light Blue)
+                        PremiumQuadroSectionHeader("TESOUROS DA PALAVRA DE DEUS", Color(0xFF008080))
+                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Discurso (10 min)", getNome(programacao.tesourosDiscursoId))
+                        PremiumQuadroRow("🎙️", Color(0xFF008080), "Joias Espirituais (10 min)", getNome(programacao.tesourosJoiasId))
+                        PremiumQuadroRow("📖", Color(0xFF4682B4), "Leitura da Bíblia (4 min)", getNome(programacao.tesourosLeituraId))
+                        
+                        // Section 2: FAÇA SEU MELHOR (👥 Gold)
+                        PremiumQuadroSectionHeader("FAÇA SEU MELHOR NO MINISTÉRIO", Color(0xFFDAA520))
+                        val opt = programacao.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+                        
+                        val pt1 = programacao.facaSeuMelhorCard1Tema.ifBlank { "Parte 1" }
+                        PremiumQuadroEstudanteRow(pt1, getNome(programacao.estudante1ApresentadorId), getNome(programacao.estudante1AjudanteId))
+                        
+                        val pt2 = programacao.facaSeuMelhorCard2Tema.ifBlank { "Parte 2" }
+                        PremiumQuadroEstudanteRow(pt2, getNome(programacao.estudante2ApresentadorId), getNome(programacao.estudante2AjudanteId))
+                        
+                        if (opt >= 3) {
+                            val pt3 = programacao.facaSeuMelhorCard3Tema.ifBlank { "Parte 3" }
+                            PremiumQuadroEstudanteRow(pt3, getNome(programacao.estudante3ApresentadorId), getNome(programacao.estudante3AjudanteId))
+                        }
+                        if (opt >= 4) {
+                            val pt4 = programacao.facaSeuMelhorCard4Tema.ifBlank { "Parte 4" }
+                            PremiumQuadroEstudanteRow(pt4, getNome(programacao.estudante4ApresentadorId), getNome(programacao.estudante4AjudanteId))
+                        }
+                        
+                        // Section 3: NOSSA VIDA CRISTÃ (💬 Garnet Red & Visita 🚗 Car)
+                        PremiumQuadroSectionHeader("NOSSA VIDA CRISTÃ", Color(0xFF8B0000))
+                        
+                        val local1Label = "Parte Local 1 (${programacao.vidaParteLocal1DuracaoMin} min)" + if (programacao.vidaParteLocal1Tema.isNotBlank()) ": ${programacao.vidaParteLocal1Tema}" else ""
+                        PremiumQuadroRow("💬", Color(0xFF8B0000), local1Label, getNome(programacao.vidaParteLocal1Id))
+                        
+                        if (programacao.vidaPartesQuantidade >= 2) {
+                            val local2Label = "Parte Local 2 (${programacao.vidaParteLocal2DuracaoMin} min)" + if (programacao.vidaParteLocal2Tema.isNotBlank()) ": ${programacao.vidaParteLocal2Tema}" else ""
+                            PremiumQuadroRow("💬", Color(0xFF8B0000), local2Label, getNome(programacao.vidaParteLocal2Id))
+                        }
+                        
+                        if (programacao.tipoSemana != "VISITA_SC") {
+                            PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Dirigente)", getNome(programacao.vidaEstudoDirigenteId))
+                            PremiumQuadroRow("💬", Color(0xFF8B0000), "Estudo Bíblico (Leitor)", getNome(programacao.vidaEstudoLeitorId))
+                        } else {
+                            PremiumQuadroRow("🚗", Color(0xFF1565C0), "Discurso de Serviço (Visita CO)", programacao.visitaNomeViajante)
+                            PremiumQuadroRow("🚗", Color(0xFF1565C0), "Tema do Discurso", programacao.visitaTemaDiscurso)
+                        }
+                        
+                        PremiumQuadroRow("💬", Color(0xFF8B0000), "Oração Final", getNome(programacao.oracaoFinalId))
                     }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Presidência e Oração Inicial
-                    QuadroRow(label = "Presidente", value = getNome(programacao.presidenteId))
-                    QuadroRow(label = "Oração Inicial", value = getNome(programacao.oracaoInicialId))
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // SEÇÃO 1: TESOUROS DA PALAVRA DE DEUS (#34727D)
-                    QuadroSectionHeader(title = "TESOUROS DA PALAVRA DE DEUS", color = Color(0xFF34727D))
-                    QuadroRow(label = "Discurso (10 min)", value = getNome(programacao.tesourosDiscursoId))
-                    QuadroRow(label = "Joias Espirituais (10 min)", value = getNome(programacao.tesourosJoiasId))
-                    QuadroRow(label = "Leitura da Bíblia (4 min)", value = getNome(programacao.tesourosLeituraId))
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // SEÇÃO 2: FAÇA SEU MELHOR NO MINISTÉRIO (#BE9F67)
-                    QuadroSectionHeader(title = "FAÇA SEU MELHOR NO MINISTÉRIO", color = Color(0xFFBE9F67))
-                    
-                    val opt = programacao.facaSeuMelhorOpcao.toIntOrNull() ?: 3
-                    
-                    QuadroEstudanteRow(nomeAmigavel = "Parte 1 (${programacao.facaSeuMelhorCard1Tema})", estudante = getNome(programacao.estudante1ApresentadorId), ajudante = getNome(programacao.estudante1AjudanteId))
-                    if (opt >= 2) {
-                        QuadroEstudanteRow(nomeAmigavel = "Parte 2 (${programacao.facaSeuMelhorCard2Tema})", estudante = getNome(programacao.estudante2ApresentadorId), ajudante = getNome(programacao.estudante2AjudanteId))
-                    }
-                    if (opt >= 3) {
-                        QuadroEstudanteRow(nomeAmigavel = "Parte 3 (${programacao.facaSeuMelhorCard3Tema})", estudante = getNome(programacao.estudante3ApresentadorId), ajudante = getNome(programacao.estudante3AjudanteId))
-                    }
-                    if (opt >= 4) {
-                        QuadroEstudanteRow(nomeAmigavel = "Parte 4 (${programacao.facaSeuMelhorCard4Tema})", estudante = getNome(programacao.estudante4ApresentadorId), ajudante = getNome(programacao.estudante4AjudanteId))
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // SEÇÃO 3: NOSSA VIDA CRISTÃ (#912421)
-                    QuadroSectionHeader(title = "NOSSA VIDA CRISTÃ", color = Color(0xFF912421))
-                    
-                    QuadroRow(label = "Parte Local 1 (${programacao.vidaParteLocal1DuracaoMin} min): ${programacao.vidaParteLocal1Tema}", value = getNome(programacao.vidaParteLocal1Id))
-                    if (programacao.vidaPartesQuantidade >= 2) {
-                        QuadroRow(label = "Parte Local 2 (${programacao.vidaParteLocal2DuracaoMin} min): ${programacao.vidaParteLocal2Tema}", value = getNome(programacao.vidaParteLocal2Id))
-                    }
-                    
-                    if (programacao.tipoSemana != "VISITA_SC") {
-                        QuadroRow(label = "Estudo Bíblico de Congregação (Dirigente)", value = getNome(programacao.vidaEstudoDirigenteId))
-                        QuadroRow(label = "Estudo Bíblico de Congregação (Leitor)", value = getNome(programacao.vidaEstudoLeitorId))
-                    } else {
-                        QuadroRow(label = "Discurso de Serviço do Viajante (SC)", value = programacao.visitaNomeViajante)
-                        QuadroRow(label = "Tema do Discurso", value = programacao.visitaTemaDiscurso)
-                    }
-                    
-                    QuadroRow(label = "Oração Final", value = getNome(programacao.oracaoFinalId))
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // Botões de Exportação Rápidos
+                // Export Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     Button(
                         onClick = { exportarPdfAgenda(context, programacao, publicadores) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)), // Vermelho PDF
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB3261E)), // M3 Error Red for PDF
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
@@ -3913,7 +4401,7 @@ fun VisualizacaoQuadroDialog(
                     
                     Button(
                         onClick = { exportarWordAgenda(context, programacao, publicadores) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)), // Azul Word
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F8F46)), // Word Green
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
@@ -3922,94 +4410,10 @@ fun VisualizacaoQuadroDialog(
                     ) {
                         Icon(Icons.Default.Edit, null, tint = Color.White)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Exportar Word", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Exportar Word (.docx)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun QuadroSectionHeader(title: String, color: Color) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(16.dp)
-                    .background(color)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-        Divider(color = color.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
-    }
-}
-
-@Composable
-fun QuadroRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF37474F),
-            modifier = Modifier.weight(1.3f)
-        )
-        Text(
-            text = value,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1565C0), 
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f)
-        )
-    }
-    Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
-}
-
-@Composable
-fun QuadroEstudanteRow(nomeAmigavel: String, estudante: String, ajudante: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-    ) {
-        Text(
-            text = nomeAmigavel,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF37474F)
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(modifier = Modifier.weight(1f)) {
-                Text("Estudante: ", fontSize = 10.sp, color = Color.Gray)
-                Text(estudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
-            }
-            if (ajudante != "---" && ajudante.isNotEmpty()) {
-                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                    Text("Ajudante: ", fontSize = 10.sp, color = Color.Gray)
-                    Text(ajudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
-                }
-            }
-        }
-        Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
     }
 }

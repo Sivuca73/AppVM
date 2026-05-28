@@ -160,6 +160,16 @@ data class MatrizPermissoes(
     val allowedLeitorEstudo: List<PerfilPublicador> = listOf(PerfilPublicador.SERVO_MINISTERIAL, PerfilPublicador.IRMAO_BATIZADO)
 )
 
+@JsonClass(generateAdapter = true)
+data class CustomRule(
+    val id: String = "",
+    val nome: String = "",
+    val parte: String = "",
+    val perfisPermitidos: List<PerfilPublicador> = emptyList(),
+    val intervaloMinimoSemanas: Int = 0,
+    val ativa: Boolean = true
+)
+
 /**
  * Estrutura do Painel de Gerenciamento de Regras do AppVM.
  */
@@ -172,5 +182,8 @@ data class PainelRegrasConfig(
     val evitarDuplaEstudoRepetidaAnterior: Boolean = true,   // Evitar repetir o par Dirigente+Leitor do Estudo da semana anterior
     
     // Matriz de Privilégios Dinâmica
-    val matriz: MatrizPermissoes = MatrizPermissoes()
+    val matriz: MatrizPermissoes = MatrizPermissoes(),
+    val regrasPersonalizadas: List<CustomRule> = emptyList(),
+    val regrasPadraoOcultadas: List<String> = emptyList(),
+    val regraGeneroAtiva: Boolean = true
 )

@@ -89,33 +89,36 @@ object RulesEngine {
         registrarDesignacao(programacao.oracaoFinalId, "Oração Final")
 
         // 1. Validando Acumulação de Partes
-        if (!regras.permitirAcumulo) {
-            designacoesSemana.forEach { (pubId, partes) ->
-                if (partes.size > 1) {
-                    val pub = pMap[pubId]
-                    relatorios.add(
-                        RelatorioValidacao(
-                            tipoParte = "GERAL",
-                            campo = "ACUMULO",
-                            mensagem = "Publicador '${pub?.nome ?: "ID $pubId"}' está designado para ${partes.size} partes (${partes.joinToString(", ")}). A regra de Acúmulo está DESATIVADA.",
-                            severidade = SeveridadeValidacao.ERRO
+        val checkAcumulo = !regras.regrasPadraoOcultadas.contains("std_acumulo")
+        if (checkAcumulo) {
+            if (!regras.permitirAcumulo) {
+                designacoesSemana.forEach { (pubId, partes) ->
+                    if (partes.size > 1) {
+                        val pub = pMap[pubId]
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "GERAL",
+                                campo = "ACUMULO",
+                                mensagem = "Publicador '${pub?.nome ?: "ID $pubId"}' está designado para ${partes.size} partes (${partes.joinToString(", ")}). A regra de Acúmulo está DESATIVADA.",
+                                severidade = SeveridadeValidacao.ERRO
+                            )
                         )
-                    )
+                    }
                 }
-            }
-        } else {
-            // Se o acúmulo for permitido, ainda há travas saudáveis de aviso
-            designacoesSemana.forEach { (pubId, partes) ->
-                if (partes.size > 2) {
-                    val pub = pMap[pubId]
-                    relatorios.add(
-                        RelatorioValidacao(
-                            tipoParte = "GERAL",
-                            campo = "ACUMULO",
-                            mensagem = "Atenção: '${pub?.nome ?: "ID $pubId"}' acumula 3 ou mais partes na mesma noite (${partes.joinToString(", ")}).",
-                            severidade = SeveridadeValidacao.AVISO
+            } else {
+                // Se o acúmulo for permitido, ainda há travas saudáveis de aviso
+                designacoesSemana.forEach { (pubId, partes) ->
+                    if (partes.size > 2) {
+                        val pub = pMap[pubId]
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "GERAL",
+                                campo = "ACUMULO",
+                                mensagem = "Atenção: '${pub?.nome ?: "ID $pubId"}' acumula 3 ou mais partes na mesma noite (${partes.joinToString(", ")}).",
+                                severidade = SeveridadeValidacao.AVISO
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -137,7 +140,8 @@ object RulesEngine {
                     )
                 }
                 // Verificação de Tribunal Semanas Consecutivas
-                if (!regras.permitirSemanasConsecutivasTribuna && fezParteSemanaAnterior(pub, programacao.semana)) {
+                val checkConsecutivo = !regras.regrasPadraoOcultadas.contains("std_consecutivo")
+                if (checkConsecutivo && !regras.permitirSemanasConsecutivasTribuna && fezParteSemanaAnterior(pub, programacao.semana)) {
                     relatorios.add(
                         RelatorioValidacao(
                             tipoParte = "TESOUROS_DISCURSO",
@@ -164,7 +168,8 @@ object RulesEngine {
                         )
                     )
                 }
-                if (!regras.permitirSemanasConsecutivasTribuna && fezParteSemanaAnterior(pub, programacao.semana)) {
+                val checkConsecutivo = !regras.regrasPadraoOcultadas.contains("std_consecutivo")
+                if (checkConsecutivo && !regras.permitirSemanasConsecutivasTribuna && fezParteSemanaAnterior(pub, programacao.semana)) {
                     relatorios.add(
                         RelatorioValidacao(
                             tipoParte = "TESOUROS_JOIAS",
@@ -363,7 +368,8 @@ object RulesEngine {
             }
 
             // Trava de Dupla Anterior (Dirigente + Leitor)
-            if (dirId != null && leiId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
+            val checkDupla = !regras.regrasPadraoOcultadas.contains("std_dupla")
+            if (checkDupla && dirId != null && leiId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
                 val dir = pMap[dirId]
                 if (dir != null) {
                     // Verificar se se repetiram na última semana gravada no histórico
@@ -379,6 +385,81 @@ object RulesEngine {
                                 severidade = SeveridadeValidacao.AVISO
                             )
                         )
+                    }
+                }
+            }
+        }
+
+        // --- VALIDAÇÃO DE REGRAS PERSONALIZADAS ---
+        regras.regrasPersonalizadas.forEach { rule ->
+            if (rule.ativa) {
+                val pubId = when (rule.parte) {
+                    "presidenteId" -> programacao.presidenteId
+                    "oracaoInicialId" -> programacao.oracaoInicialId
+                    "tesourosDiscursoId" -> programacao.tesourosDiscursoId
+                    "tesourosJoiasId" -> programacao.tesourosJoiasId
+                    "tesourosLeituraId" -> programacao.tesourosLeituraId
+                    "estudante1ApresentadorId" -> programacao.estudante1ApresentadorId
+                    "estudante1AjudanteId" -> programacao.estudante1AjudanteId
+                    "estudante2ApresentadorId" -> programacao.estudante2ApresentadorId
+                    "estudante2AjudanteId" -> programacao.estudante2AjudanteId
+                    "estudante3ApresentadorId" -> programacao.estudante3ApresentadorId
+                    "estudante3AjudanteId" -> programacao.estudante3AjudanteId
+                    "estudante4ApresentadorId" -> programacao.estudante4ApresentadorId
+                    "estudante4AjudanteId" -> programacao.estudante4AjudanteId
+                    "vidaParteLocal1Id" -> programacao.vidaParteLocal1Id
+                    "vidaParteLocal2Id" -> programacao.vidaParteLocal2Id
+                    "vidaEstudoDirigenteId" -> programacao.vidaEstudoDirigenteId
+                    "vidaEstudoLeitorId" -> programacao.vidaEstudoLeitorId
+                    "oracaoFinalId" -> programacao.oracaoFinalId
+                    else -> null
+                }
+                
+                if (pubId != null) {
+                    val pub = pMap[pubId]
+                    if (pub != null) {
+                        if (rule.perfisPermitidos.isNotEmpty() && !rule.perfisPermitidos.contains(pub.perfil)) {
+                            relatorios.add(
+                                RelatorioValidacao(
+                                    tipoParte = "REGRA_PERSONALIZADA",
+                                    campo = rule.parte,
+                                    mensagem = "Regra '${rule.nome}': ${pub.nome} é ${pub.perfil}, mas esta regra permite apenas: ${rule.perfisPermitidos.joinToString { it.name }}.",
+                                    severidade = SeveridadeValidacao.ERRO
+                                )
+                            )
+                        }
+                        
+                        if (rule.intervaloMinimoSemanas > 0 && pub.historicoPartes.isNotEmpty()) {
+                            pub.historicoPartes.forEach { hist ->
+                                val partMatches = when (rule.parte) {
+                                    "presidenteId" -> hist.tipoParte == "PRESIDENTE"
+                                    "oracaoInicialId" -> hist.tipoParte == "ORACAO_INICIAL"
+                                    "tesourosDiscursoId" -> hist.tipoParte == "TESOUROS_DISCURSO"
+                                    "tesourosJoiasId" -> hist.tipoParte == "TESOUROS_JOIAS"
+                                    "tesourosLeituraId" -> hist.tipoParte == "TESOUROS_LEITURA"
+                                    "estudante1ApresentadorId", "estudante2ApresentadorId", "estudante3ApresentadorId", "estudante4ApresentadorId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "APRESENTADOR"
+                                    "estudante1AjudanteId", "estudante2AjudanteId", "estudante3AjudanteId", "estudante4AjudanteId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "AJUDANTE"
+                                    "vidaParteLocal1Id", "vidaParteLocal2Id" -> hist.tipoParte.contains("LOCAL")
+                                    "vidaEstudoDirigenteId" -> hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE"
+                                    "vidaEstudoLeitorId" -> hist.tipoParte == "VIDA_ESTUDO_LEITOR"
+                                    "oracaoFinalId" -> hist.tipoParte == "ORACAO_FINAL"
+                                    else -> false
+                                }
+                                if (partMatches) {
+                                    val weeksAgo = obterSemanasDistancia(programacao.semana, hist.semana)
+                                    if (weeksAgo < rule.intervaloMinimoSemanas) {
+                                        relatorios.add(
+                                            RelatorioValidacao(
+                                                tipoParte = "REGRA_PERSONALIZADA",
+                                                campo = rule.parte,
+                                                mensagem = "Regra '${rule.nome}': ${pub.nome} realizou esta parte há apenas $weeksAgo semanas (${hist.semana}). Mínimo exigido: ${rule.intervaloMinimoSemanas} semanas.",
+                                                severidade = SeveridadeValidacao.ERRO
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -485,7 +566,8 @@ object RulesEngine {
         }
 
         // 3. Regra de Gênero do Ajudante
-        if (ajudanteId != null) {
+        val checkGenero = !regras.regrasPadraoOcultadas.contains("std_genero") && regras.regraGeneroAtiva
+        if (checkGenero && ajudanteId != null) {
             val aju = pMap[ajudanteId]
             if (aju != null) {
                 // Checar se gênero bate
@@ -510,7 +592,8 @@ object RulesEngine {
         }
 
         // 4. Alternância de Papéis (Presenter / Helper)
-        if (regras.alternarPapeisEstudante && apr.historicoPartes.isNotEmpty()) {
+        val checkAlternancia = !regras.regrasPadraoOcultadas.contains("std_alternancia")
+        if (checkAlternancia && regras.alternarPapeisEstudante && apr.historicoPartes.isNotEmpty()) {
             val ultimaParte = apr.historicoPartes.firstOrNull { it.tipoParte.startsWith("MINISTERIO_") }
             if (ultimaParte != null && ultimaParte.papel == "APRESENTADOR") {
                 relatorios.add(
@@ -628,13 +711,25 @@ object RulesEngine {
             var score = 0 // Menor score = melhor candidato (menos penalidade)
             val motivos = java.lang.StringBuilder()
 
+            // Filtro por regras personalizadas: se houver regra limitando perfis para este campo, aplique
+            var excluidoPorRegraRecente = false
+            regras.regrasPersonalizadas.forEach { rule ->
+                if (rule.ativa && rule.parte == campo) {
+                    if (rule.perfisPermitidos.isNotEmpty() && !rule.perfisPermitidos.contains(pub.perfil)) {
+                        excluidoPorRegraRecente = true
+                    }
+                }
+            }
+            if (excluidoPorRegraRecente) return@forEach
+
             // 1. Filtrar se pertence aos perfis da matriz
             if (!allowedProfiles.contains(pub.perfil)) {
                 return@forEach // Desqualificado totalmente
             }
 
             // Exceção estrita de gênero no ajudante se o apresentador estiver selecionado
-            if (mappedCampo == "estudanteAjudanteId" && apresentadorEstudanteId != null) {
+            val checkGenero = !regras.regrasPadraoOcultadas.contains("std_genero") && regras.regraGeneroAtiva
+            if (checkGenero && mappedCampo == "estudanteAjudanteId" && apresentadorEstudanteId != null) {
                 val apr = pMap[apresentadorEstudanteId]
                 if (apr != null && apr.genero != pub.genero && !saoParentesDePrimeiroGrau(apr, pub)) {
                     return@forEach // Desqualificado por gênero incompatível sem parentesco
@@ -657,7 +752,8 @@ object RulesEngine {
             // 2. Pontuação/Penalidades por rodízio:
             
             // A. Regras consecutivas de tribuna (Ancião/Servo)
-            if (campo == "tesourosDiscursoId" || campo == "tesourosJoiasId" || campo.startsWith("vidaParteLocal") || campo == "vidaEstudoDirigenteId") {
+            val checkConsecutivo = !regras.regrasPadraoOcultadas.contains("std_consecutivo")
+            if (checkConsecutivo && (campo == "tesourosDiscursoId" || campo == "tesourosJoiasId" || campo.startsWith("vidaParteLocal") || campo == "vidaEstudoDirigenteId")) {
                 if (fezParteSemanaAnterior(pub, programacao.semana)) {
                     if (!regras.permitirSemanasConsecutivasTribuna) {
                         score += 50
@@ -670,7 +766,8 @@ object RulesEngine {
             }
 
             // B. Alternância de Papéis (Presenter / Helper)
-            if (mappedCampo == "estudanteApresentadorId" && regras.alternarPapeisEstudante && pub.historicoPartes.isNotEmpty()) {
+            val checkAlternancia = !regras.regrasPadraoOcultadas.contains("std_alternancia")
+            if (checkAlternancia && mappedCampo == "estudanteApresentadorId" && regras.alternarPapeisEstudante && pub.historicoPartes.isNotEmpty()) {
                 val ultimaParte = pub.historicoPartes.firstOrNull { it.tipoParte.startsWith("MINISTERIO_") }
                 if (ultimaParte != null && ultimaParte.papel == "APRESENTADOR") {
                     score += 20
@@ -693,12 +790,44 @@ object RulesEngine {
             }
 
             // D. Evitar repetir mesma dupla no Estudo
-            if (campo == "vidaEstudoLeitorId" && programacao.vidaEstudoDirigenteId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
+            val checkDupla = !regras.regrasPadraoOcultadas.contains("std_dupla")
+            if (checkDupla && campo == "vidaEstudoLeitorId" && programacao.vidaEstudoDirigenteId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
                 val dId = programacao.vidaEstudoDirigenteId
                 val foiDuplaAnteontem = pub.historicoPartes.any { it.tipoParte == "VIDA_ESTUDO_DIRIGENTE" && it.parceiroId == dId }
                 if (foiDuplaAnteontem) {
                     score += 40
                     motivos.append("Alerta: Fez dupla com este Dirigente recentemente. ")
+                }
+            }
+
+            // E. Penalização/Filtro de intervalo de Regras Personalizadas
+            regras.regrasPersonalizadas.forEach { rule ->
+                if (rule.ativa && rule.parte == campo) {
+                    if (rule.intervaloMinimoSemanas > 0) {
+                        pub.historicoPartes.forEach { hist ->
+                            val partMatches = when (rule.parte) {
+                                "presidenteId" -> hist.tipoParte == "PRESIDENTE"
+                                "oracaoInicialId" -> hist.tipoParte == "ORACAO_INICIAL"
+                                "tesourosDiscursoId" -> hist.tipoParte == "TESOUROS_DISCURSO"
+                                "tesourosJoiasId" -> hist.tipoParte == "TESOUROS_JOIAS"
+                                "tesourosLeituraId" -> hist.tipoParte == "TESOUROS_LEITURA"
+                                "estudante1ApresentadorId", "estudante2ApresentadorId", "estudante3ApresentadorId", "estudante4ApresentadorId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "APRESENTADOR"
+                                "estudante1AjudanteId", "estudante2AjudanteId", "estudante3AjudanteId", "estudante4AjudanteId" -> hist.tipoParte.contains("ESTUDANTE") && hist.papel == "AJUDANTE"
+                                "vidaParteLocal1Id", "vidaParteLocal2Id" -> hist.tipoParte.contains("LOCAL")
+                                "vidaEstudoDirigenteId" -> hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE"
+                                "vidaEstudoLeitorId" -> hist.tipoParte == "VIDA_ESTUDO_LEITOR"
+                                "oracaoFinalId" -> hist.tipoParte == "ORACAO_FINAL"
+                                else -> false
+                            }
+                            if (partMatches) {
+                                val weeksAgo = obterSemanasDistancia(programacao.semana, hist.semana)
+                                if (weeksAgo < rule.intervaloMinimoSemanas) {
+                                    score += 150
+                                    motivos.append("Restrição '${rule.nome}': Atuou nesta parte há apenas $weeksAgo semanas. ")
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -721,5 +850,19 @@ object RulesEngine {
 
         // Ordenando pelo score de penalidade (menor score = primeiro)
         return resultado.sortedBy { it.second }.map { Pair(it.first, it.third) }
+    }
+
+    fun obterSemanasDistancia(semanaAtual: String, semanaAntiga: String): Int {
+        try {
+            val format = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val d1 = format.parse(semanaAtual)
+            val d2 = format.parse(semanaAntiga)
+            if (d1 != null && d2 != null) {
+                val diffMs = d1.time - d2.time
+                val diffDays = diffMs / (1000 * 60 * 60 * 24)
+                return (diffDays / 7).toInt()
+            }
+        } catch(e: Exception) {}
+        return 10
     }
 }
