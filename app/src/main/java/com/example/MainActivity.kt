@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -716,11 +717,113 @@ fun AgendaEsquemaTab(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            // 1. CABEÇALHO GERAL (Card de Topo)
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EDF7)),
-                border = BorderStroke(1.dp, Color(0xFFEADDFF)),
+            // Elegante menu horizontal com 3 seletores com ícones correspondentes
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFF1F0F4))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val options = listOf(
+                    Triple("NORMAL", "Reunião Normal", "🗓️"),
+                    Triple("VISITA_SC", "Visita do SC", "💼"),
+                    Triple("EVENTO", "Evento", "🏛️")
+                )
+                options.forEach { (tipo, label, icon) ->
+                    val isSelected = programacao.tipoSemana == tipo
+                    val bg = if (isSelected) Color(0xFF6750A4) else Color.Transparent
+                    val fg = if (isSelected) Color.White else Color(0xFF49454F)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(bg)
+                            .clickable {
+                                onUpdateProg { it.copy(tipoSemana = tipo) }
+                            }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(icon, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = label,
+                                color = fg,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (programacao.tipoSemana == "EVENTO") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 40.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EAFF)),
+                    border = BorderStroke(1.dp, Color(0xFF6750A4).copy(alpha = 0.2f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(Color(0xFFCEB1FC), Color(0xFF6750A4))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🏛️", fontSize = 38.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = "SEMANA ESPECIAL",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF6750A4),
+                            letterSpacing = 1.5.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Não há reunião nessa semana. Estaremos em uma Assembleia de Circuito, em um Congresso Regional ou realizaremos a Celebração da Morte de Jesus.",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1C1B1F),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 24.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
+                    }
+                }
+            } else {
+                // 1. CABEÇALHO GERAL (Card de Topo)
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EDF7)),
+                    border = BorderStroke(1.dp, Color(0xFFEADDFF)),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -728,7 +831,7 @@ fun AgendaEsquemaTab(
                         Text("👑", fontSize = 18.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "PRESIDÊNCIA E ORAÇÃO DE ABERTURA",
+                            text = "PRESIDÊNCIA E ORAÇÃO INICIAL",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = Color(0xFF49454F),
@@ -839,30 +942,28 @@ fun AgendaEsquemaTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Partes:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF202124))
-            listOf("1", "2", "3", "4", "custom").forEach { opt ->
+            listOf("3", "4", "custom").forEach { opt ->
                 val selected = programacao.facaSeuMelhorOpcao == opt
-                val label = if (opt == "custom") "⚙️" else opt
+                val label = when (opt) {
+                    "3" -> "3"
+                    "4" -> "4"
+                    "custom" -> "⚙️+"
+                    else -> opt
+                }
                 AssistChip(
                     onClick = {
                         onUpdateProg { current ->
                             val updated = current.copy(facaSeuMelhorOpcao = opt)
                             when (opt) {
-                                "1" -> updated.copy(
-                                    facaSeuMelhorCard1Tema = "Iniciando conversas"
-                                )
-                                "2" -> updated.copy(
-                                    facaSeuMelhorCard1Tema = "Iniciando conversas",
-                                    facaSeuMelhorCard2Tema = "Cultivando o interesse"
-                                )
                                 "3" -> updated.copy(
                                     facaSeuMelhorCard1Tema = "Iniciando conversas",
                                     facaSeuMelhorCard2Tema = "Cultivando o interesse",
                                     facaSeuMelhorCard3Tema = "Fazendo discípulos"
                                 )
                                 "4" -> updated.copy(
-                                    facaSeuMelhorCard1Tema = "Fazendo discípulos",
-                                    facaSeuMelhorCard2Tema = "Explicando suas crenças",
-                                    facaSeuMelhorCard3Tema = "Discurso",
+                                    facaSeuMelhorCard1Tema = "Iniciando conversas",
+                                    facaSeuMelhorCard2Tema = "Cultivando o interesse",
+                                    facaSeuMelhorCard3Tema = "Fazendo discípulos",
                                     facaSeuMelhorCard4Tema = "Fazendo discípulos"
                                 )
                                 else -> updated
@@ -909,36 +1010,26 @@ fun AgendaEsquemaTab(
         // Identify dynamic theme options according to layout option
         val fsmOpcao = programacao.facaSeuMelhorOpcao
         val cardCountToRender = when (fsmOpcao) {
-            "1" -> 1
-            "2" -> 2
             "3" -> 3
             "4" -> 4
             "custom" -> programacao.facaSeuMelhorCardCountCustom.coerceIn(1, 3)
             else -> 3
         }
 
-        val tema1Options = when (fsmOpcao) {
-            "1" -> listOf("Iniciando conversas")
-            "2" -> listOf("Iniciando conversas", "Cultivando o interesse")
-            "3" -> listOf("Iniciando conversas", "Cultivando o interesse", "Explicando suas crenças", "Fazendo discípulos", "Discurso", "O que você diria?")
-            "4" -> listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
-            else -> emptyList()
-        }
-        val tema2Options = when (fsmOpcao) {
-            "2" -> listOf("Iniciando conversas", "Cultivando o interesse")
-            "3" -> listOf("Iniciando conversas", "Cultivando o interesse", "Explicando suas crenças", "Fazendo discípulos", "Discurso", "O que você diria?")
-            "4" -> listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
-            else -> emptyList()
-        }
-        val tema3Options = when (fsmOpcao) {
-            "3" -> listOf("Iniciando conversas", "Cultivando o interesse", "Explicando suas crenças", "Fazendo discípulos", "Discurso", "O que você diria?")
-            "4" -> listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
-            else -> emptyList()
-        }
-        val tema4Options = when (fsmOpcao) {
-            "4" -> listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
-            else -> emptyList()
-        }
+        val tema1Options = emptyList<String>() // Card 1 is always fixed "Iniciando conversas" and has NO dropdown
+        
+        val tema2Options = listOf("Iniciando conversas", "Cultivando o interesse")
+        
+        val tema3Options = listOf(
+            "Iniciando conversas",
+            "Explicando suas crenças",
+            "Fazendo discípulos",
+            "Cultivando o interesse",
+            "Discurso",
+            "O que você diria?"
+        )
+        
+        val tema4Options = listOf("Fazendo discípulos", "Explicando suas crenças", "Discurso")
 
         if (cardCountToRender >= 1) {
             EstudanteCardItem(
@@ -966,10 +1057,11 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard1Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard1Tema = t) } },
+                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard1Tema = t, estudante1Formato = FormatoParteEstudante.DEMONSTRACAO) } },
                 temaOptions = tema1Options,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom"
+                isCustom = fsmOpcao == "custom",
+                titleOverride = "Parte 1"
             )
         }
 
@@ -999,10 +1091,11 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard2Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard2Tema = t) } },
+                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard2Tema = t, estudante2Formato = FormatoParteEstudante.DEMONSTRACAO) } },
                 temaOptions = tema2Options,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom"
+                isCustom = fsmOpcao == "custom",
+                titleOverride = "Parte 2"
             )
         }
 
@@ -1032,10 +1125,19 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard3Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard3Tema = t) } },
+                onTemaChange = { t ->
+                    onUpdateProg { 
+                        val fmt = if (t == "Discurso" || t == "O que você diria?") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
+                        it.copy(
+                            facaSeuMelhorCard3Tema = t,
+                            estudante3Formato = fmt
+                        )
+                    }
+                },
                 temaOptions = tema3Options,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom"
+                isCustom = fsmOpcao == "custom",
+                titleOverride = "Parte 3"
             )
         }
 
@@ -1065,10 +1167,19 @@ fun AgendaEsquemaTab(
                     }
                 },
                 tema = programacao.facaSeuMelhorCard4Tema,
-                onTemaChange = { t -> onUpdateProg { it.copy(facaSeuMelhorCard4Tema = t) } },
+                onTemaChange = { t ->
+                    onUpdateProg { 
+                        val fmt = if (t == "Discurso") FormatoParteEstudante.DISCURSO else FormatoParteEstudante.DEMONSTRACAO
+                        it.copy(
+                            facaSeuMelhorCard4Tema = t,
+                            estudante4Formato = fmt
+                        )
+                    }
+                },
                 temaOptions = tema4Options,
                 containerColor = Color(0xFFF0E9DC),
-                isCustom = fsmOpcao == "custom"
+                isCustom = fsmOpcao == "custom",
+                titleOverride = "Parte 4"
             )
         }
 
@@ -1282,53 +1393,114 @@ fun AgendaEsquemaTab(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Estudo Bíblico de Congregação (30 min)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF7DEDD)), // Grená clarinho
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("Estudo Bíblico de Congregação (30 min)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF202124))
-                Text("Dirigente e Leitor - Fortes travas de dupla e acúmulo", fontSize = 11.sp, color = Color(0xFF5F6368))
-                
-                Spacer(modifier = Modifier.height(10.dp))
+        if (programacao.tipoSemana == "VISITA_SC") {
+            // Card Especial: Discurso de serviço (30 min)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF7DEDD)), // Grená clarinho
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF912421).copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("💼", fontSize = 18.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Discurso de serviço (30 min)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF912421)
+                        )
+                    }
+                    Text(
+                        text = "Parte especial conduzida pelo Superintendente de Circuito durante a sua visita.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF5F6368),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
 
-                ParteSelectorField(
-                    title = "Dirigente",
-                    subtitle = "Ancião ou Servo aprovado",
-                    selectedId = programacao.vidaEstudoDirigenteId,
-                    publicadores = publicadores,
-                    alertas = alertas,
-                    campoKey = "vidaEstudoDirigenteId",
-                    onSelect = { id -> onUpdateProg { it.copy(vidaEstudoDirigenteId = id) } },
-                    onSuggest = {
-                        dialogSlotToSuggest = "vidaEstudoDirigenteId"
-                        dialogEstudanteFormato = null
-                        dialogEstudanteApresentadorId = null
-                    },
-                    containerColor = Color.White
-                )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                Spacer(modifier = Modifier.height(6.dp))
+                    // Tema do Discurso
+                    OutlinedTextField(
+                        value = programacao.visitaTemaDiscurso,
+                        onValueChange = { t -> onUpdateProg { it.copy(visitaTemaDiscurso = t) } },
+                        label = { Text("Tema do Discurso de Serviço", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF912421),
+                            focusedLabelColor = Color(0xFF912421)
+                        )
+                    )
 
-                ParteSelectorField(
-                    title = "Leitor",
-                    subtitle = "Homens batizados (Forte prioridade não-anciãos)",
-                    selectedId = programacao.vidaEstudoLeitorId,
-                    publicadores = publicadores,
-                    alertas = alertas,
-                    campoKey = "vidaEstudoLeitorId",
-                    onSelect = { id -> onUpdateProg { it.copy(vidaEstudoLeitorId = id) } },
-                    onSuggest = {
-                        dialogSlotToSuggest = "vidaEstudoLeitorId"
-                        dialogEstudanteFormato = null
-                        dialogEstudanteApresentadorId = null
-                    },
-                    containerColor = Color.White
-                )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Nome do Superintendente
+                    OutlinedTextField(
+                        value = programacao.visitaNomeViajante,
+                        onValueChange = { n -> onUpdateProg { it.copy(visitaNomeViajante = n) } },
+                        label = { Text("Nome do Superintendente de Circuito", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF912421),
+                            focusedLabelColor = Color(0xFF912421)
+                        )
+                    )
+                }
+            }
+        } else {
+            // Estudo Bíblico de Congregação (30 min)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF7DEDD)), // Grená clarinho
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Estudo Bíblico de Congregação (30 min)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF202124))
+                    Text("Dirigente e Leitor - Fortes travas de dupla e acúmulo", fontSize = 11.sp, color = Color(0xFF5F6368))
+                    
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    ParteSelectorField(
+                        title = "Dirigente",
+                        subtitle = "Ancião ou Servo aprovado",
+                        selectedId = programacao.vidaEstudoDirigenteId,
+                        publicadores = publicadores,
+                        alertas = alertas,
+                        campoKey = "vidaEstudoDirigenteId",
+                        onSelect = { id -> onUpdateProg { it.copy(vidaEstudoDirigenteId = id) } },
+                        onSuggest = {
+                            dialogSlotToSuggest = "vidaEstudoDirigenteId"
+                            dialogEstudanteFormato = null
+                            dialogEstudanteApresentadorId = null
+                        },
+                        containerColor = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    ParteSelectorField(
+                        title = "Leitor",
+                        subtitle = "Homens batizados (Forte prioridade não-anciãos)",
+                        selectedId = programacao.vidaEstudoLeitorId,
+                        publicadores = publicadores,
+                        alertas = alertas,
+                        campoKey = "vidaEstudoLeitorId",
+                        onSelect = { id -> onUpdateProg { it.copy(vidaEstudoLeitorId = id) } },
+                        onSuggest = {
+                            dialogSlotToSuggest = "vidaEstudoLeitorId"
+                            dialogEstudanteFormato = null
+                            dialogEstudanteApresentadorId = null
+                        },
+                        containerColor = Color.White
+                    )
+                }
             }
         }
 
@@ -1406,22 +1578,27 @@ fun AgendaEsquemaTab(
             else -> false
         }
 
-        val vidaPreenchido = if (programacao.vidaPartesQuantidade == 1) {
+        val vidaPreenchido = if (programacao.tipoSemana == "VISITA_SC") {
+            true
+        } else if (programacao.vidaPartesQuantidade == 1) {
             programacao.vidaParteLocal1Id != null
         } else {
             programacao.vidaParteLocal1Id != null && programacao.vidaParteLocal2Id != null
         }
 
-        val todosCamposPreenchidos = programacao.presidenteId != null &&
+        val todosCamposPreenchidos = if (programacao.tipoSemana == "EVENTO") {
+            true
+        } else {
+            programacao.presidenteId != null &&
             programacao.oracaoInicialId != null &&
             programacao.tesourosDiscursoId != null &&
             programacao.tesourosJoiasId != null &&
             programacao.tesourosLeituraId != null &&
             fsmPreenchido &&
             vidaPreenchido &&
-            programacao.vidaEstudoDirigenteId != null &&
-            programacao.vidaEstudoLeitorId != null &&
+            (programacao.tipoSemana == "VISITA_SC" || (programacao.vidaEstudoDirigenteId != null && programacao.vidaEstudoLeitorId != null)) &&
             programacao.oracaoFinalId != null
+        }
 
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -1480,6 +1657,7 @@ fun AgendaEsquemaTab(
             ) {
                 Text("✦ Gerar Designações Automaticamente", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
+        }
         }
     }
 }
@@ -1719,7 +1897,8 @@ fun EstudanteCardItem(
     onTemaChange: (String) -> Unit,
     temaOptions: List<String> = emptyList(),
     containerColor: Color = Color.Unspecified,
-    isCustom: Boolean = false
+    isCustom: Boolean = false,
+    titleOverride: String? = null
 ) {
     var showSelectDono by remember { mutableStateOf(false) }
     var showSelectAjudante by remember { mutableStateOf(false) }
@@ -1753,7 +1932,7 @@ fun EstudanteCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Estudante $num",
+                    text = titleOverride ?: "Estudante $num",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF202124)

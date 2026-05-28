@@ -89,6 +89,9 @@ data class ParteEstudanteConfig(
 @JsonClass(generateAdapter = true)
 data class ProgramacaoSemana(
     val semana: String, // Data da reunião, e.g., "2026-06-01"
+    val tipoSemana: String = "NORMAL", // "NORMAL", "VISITA_SC", "EVENTO"
+    val visitaTemaDiscurso: String = "",
+    val visitaNomeViajante: String = "",
     
     // Cabeçalho Geral (Card de Topo)
     val presidenteId: Int? = null,

@@ -31,6 +31,9 @@ object RulesEngine {
         publicadores: List<Publicador>,
         regras: PainelRegrasConfig
     ): List<RelatorioValidacao> {
+        if (programacao.tipoSemana == "EVENTO") {
+            return emptyList()
+        }
         val relatorios = mutableListOf<RelatorioValidacao>()
         val pMap = publicadores.associateBy { it.id }
 
@@ -211,10 +214,11 @@ object RulesEngine {
             "custom" -> programacao.facaSeuMelhorCardCountCustom.coerceIn(1, 3)
             else -> 3
         }
-        if (cardValidationCount >= 1) validarEstudante(1, programacao.estudante1ApresentadorId, programacao.estudante1AjudanteId, programacao.estudante1Formato, pMap, regras, programacao.semana, relatorios)
-        if (cardValidationCount >= 2) validarEstudante(2, programacao.estudante2ApresentadorId, programacao.estudante2AjudanteId, programacao.estudante2Formato, pMap, regras, programacao.semana, relatorios)
-        if (cardValidationCount >= 3) validarEstudante(3, programacao.estudante3ApresentadorId, programacao.estudante3AjudanteId, programacao.estudante3Formato, pMap, regras, programacao.semana, relatorios)
-        if (cardValidationCount >= 4) validarEstudante(4, programacao.estudante4ApresentadorId, programacao.estudante4AjudanteId, programacao.estudante4Formato, pMap, regras, programacao.semana, relatorios)
+        val isOptionCustom = (programacao.facaSeuMelhorOpcao == "custom")
+        if (cardValidationCount >= 1) validarEstudante(1, programacao.estudante1ApresentadorId, programacao.estudante1AjudanteId, programacao.estudante1Formato, programacao.facaSeuMelhorCard1Tema, isOptionCustom, pMap, regras, programacao.semana, relatorios)
+        if (cardValidationCount >= 2) validarEstudante(2, programacao.estudante2ApresentadorId, programacao.estudante2AjudanteId, programacao.estudante2Formato, programacao.facaSeuMelhorCard2Tema, isOptionCustom, pMap, regras, programacao.semana, relatorios)
+        if (cardValidationCount >= 3) validarEstudante(3, programacao.estudante3ApresentadorId, programacao.estudante3AjudanteId, programacao.estudante3Formato, programacao.facaSeuMelhorCard3Tema, isOptionCustom, pMap, regras, programacao.semana, relatorios)
+        if (cardValidationCount >= 4) validarEstudante(4, programacao.estudante4ApresentadorId, programacao.estudante4AjudanteId, programacao.estudante4Formato, programacao.facaSeuMelhorCard4Tema, isOptionCustom, pMap, regras, programacao.semana, relatorios)
 
 
         // --- VALIDAÇÕES: NOSSA VIDA CRISTÃ ---
@@ -283,97 +287,99 @@ object RulesEngine {
         }
 
         // B. Estudo Bíblico de Congregação (Dirigente + Leitor)
-        val dirId = programacao.vidaEstudoDirigenteId
-        val leiId = programacao.vidaEstudoLeitorId
+        if (programacao.tipoSemana != "VISITA_SC") {
+            val dirId = programacao.vidaEstudoDirigenteId
+            val leiId = programacao.vidaEstudoLeitorId
 
-        if (dirId != null && leiId != null) {
-            // Trava de acúmulo interna do estudo: O dirigente não pode ser o leitor
-            if (dirId == leiId) {
-                relatorios.add(
-                    RelatorioValidacao(
-                        tipoParte = "VIDA_ESTUDO",
-                        campo = "vidaEstudoLeitorId",
-                        mensagem = "Trava de Acúmulo Estrita: O dirigente do estudo não pode ser também o leitor do estudo na mesma semana.",
-                        severidade = SeveridadeValidacao.ERRO
-                    )
-                )
-            }
-        }
-
-        // Validando Dirigente do Estudo
-        if (dirId != null) {
-            val dir = pMap[dirId]
-            if (dir != null) {
-                // Regra de matriz ordinária
-                if (!regras.matriz.allowedDirigenteEstudo.contains(dir.perfil)) {
+            if (dirId != null && leiId != null) {
+                // Trava de acúmulo interna do estudo: O dirigente não pode ser o leitor
+                if (dirId == leiId) {
                     relatorios.add(
                         RelatorioValidacao(
                             tipoParte = "VIDA_ESTUDO",
-                            campo = "vidaEstudoDirigenteId",
-                            mensagem = "Dirigente inválido: ${dir.nome} é ${dir.perfil}. Permitido apenas: ${regras.matriz.allowedDirigenteEstudo.joinToString()}.",
-                            severidade = SeveridadeValidacao.ERRO
-                        )
-                    )
-                } else if (dir.perfil == PerfilPublicador.SERVO_MINISTERIAL && !dir.servoDirigenteAprovado) {
-                    // Servos devem ser expressamente aprovados pelo corpo de anciãos para dirigir o estudo
-                    relatorios.add(
-                        RelatorioValidacao(
-                            tipoParte = "VIDA_ESTUDO",
-                            campo = "vidaEstudoDirigenteId",
-                            mensagem = "${dir.nome} é Servo Ministerial, mas NÃO está marcado como 'Aprovado para Dirigir' nas configurações do Corpo.",
+                            campo = "vidaEstudoLeitorId",
+                            mensagem = "Trava de Acúmulo Estrita: O dirigente do estudo não pode ser também o leitor do estudo na mesma semana.",
                             severidade = SeveridadeValidacao.ERRO
                         )
                     )
                 }
             }
-        }
 
-        // Validando Leitor do Estudo
-        if (leiId != null) {
-            val lei = pMap[leiId]
-            if (lei != null) {
-                if (!regras.matriz.allowedLeitorEstudo.contains(lei.perfil)) {
-                    relatorios.add(
-                        RelatorioValidacao(
-                            tipoParte = "VIDA_ESTUDO",
-                            campo = "vidaEstudoLeitorId",
-                            mensagem = "Leitor de Estudo inválido: ${lei.nome} é ${lei.perfil}.",
-                            severidade = SeveridadeValidacao.ERRO
-                        )
-                    )
-                } else {
-                    // Priorização forte de NÃO-anciãos para ler
-                    if (lei.perfil == PerfilPublicador.ANCIAO) {
+            // Validando Dirigente do Estudo
+            if (dirId != null) {
+                val dir = pMap[dirId]
+                if (dir != null) {
+                    // Regra de matriz ordinária
+                    if (!regras.matriz.allowedDirigenteEstudo.contains(dir.perfil)) {
                         relatorios.add(
                             RelatorioValidacao(
                                 tipoParte = "VIDA_ESTUDO",
-                                campo = "vidaEstudoLeitorId",
-                                mensagem = "Priorização: O leitor do estudo deve idealmente ser outro irmão batizado que NÃO seja Ancião. Considere designar outro irmão comum.",
-                                severidade = SeveridadeValidacao.AVISO
+                                campo = "vidaEstudoDirigenteId",
+                                mensagem = "Dirigente inválido: ${dir.nome} é ${dir.perfil}. Permitido apenas: ${regras.matriz.allowedDirigenteEstudo.joinToString()}.",
+                                severidade = SeveridadeValidacao.ERRO
+                            )
+                        )
+                    } else if (dir.perfil == PerfilPublicador.SERVO_MINISTERIAL && !dir.servoDirigenteAprovado) {
+                        // Servos devem ser expressamente aprovados pelo corpo de anciãos para dirigir o estudo
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "VIDA_ESTUDO",
+                                campo = "vidaEstudoDirigenteId",
+                                mensagem = "${dir.nome} é Servo Ministerial, mas NÃO está marcado como 'Aprovado para Dirigir' nas configurações do Corpo.",
+                                severidade = SeveridadeValidacao.ERRO
                             )
                         )
                     }
                 }
             }
-        }
 
-        // Trava de Dupla Anterior (Dirigente + Leitor)
-        if (dirId != null && leiId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
-            val dir = pMap[dirId]
-            if (dir != null) {
-                // Verificar se se repetiram na última semana gravada no histórico
-                val foiDuplaNaSemanaAnterior = dir.historicoPartes.any { hist ->
-                    hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE" && hist.parceiroId == leiId
-                }
-                if (foiDuplaNaSemanaAnterior) {
-                    relatorios.add(
-                        RelatorioValidacao(
-                            tipoParte = "VIDA_ESTUDO",
-                            campo = "vidaEstudoLeitorId",
-                            mensagem = "Trava de Dupla: A dupla Dirigente+Leitor (${dir.nome} e ${pMap[leiId]?.nome}) já fez o Estudo Bíblico em conjunto na semana anterior. Altere para evitar repetição.",
-                            severidade = SeveridadeValidacao.AVISO
+            // Validando Leitor do Estudo
+            if (leiId != null) {
+                val lei = pMap[leiId]
+                if (lei != null) {
+                    if (!regras.matriz.allowedLeitorEstudo.contains(lei.perfil)) {
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "VIDA_ESTUDO",
+                                campo = "vidaEstudoLeitorId",
+                                mensagem = "Leitor de Estudo inválido: ${lei.nome} é ${lei.perfil}.",
+                                severidade = SeveridadeValidacao.ERRO
+                            )
                         )
-                    )
+                    } else {
+                        // Priorização forte de NÃO-anciãos para ler
+                        if (lei.perfil == PerfilPublicador.ANCIAO) {
+                            relatorios.add(
+                                RelatorioValidacao(
+                                    tipoParte = "VIDA_ESTUDO",
+                                    campo = "vidaEstudoLeitorId",
+                                    mensagem = "Priorização: O leitor do estudo deve idealmente ser outro irmão batizado que NÃO seja Ancião. Considere designar outro irmão comum.",
+                                    severidade = SeveridadeValidacao.AVISO
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Trava de Dupla Anterior (Dirigente + Leitor)
+            if (dirId != null && leiId != null && regras.evitarDuplaEstudoRepetidaAnterior) {
+                val dir = pMap[dirId]
+                if (dir != null) {
+                    // Verificar se se repetiram na última semana gravada no histórico
+                    val foiDuplaNaSemanaAnterior = dir.historicoPartes.any { hist ->
+                        hist.tipoParte == "VIDA_ESTUDO_DIRIGENTE" && hist.parceiroId == leiId
+                    }
+                    if (foiDuplaNaSemanaAnterior) {
+                        relatorios.add(
+                            RelatorioValidacao(
+                                tipoParte = "VIDA_ESTUDO",
+                                campo = "vidaEstudoLeitorId",
+                                mensagem = "Trava de Dupla: A dupla Dirigente+Leitor (${dir.nome} e ${pMap[leiId]?.nome}) já fez o Estudo Bíblico em conjunto na semana anterior. Altere para evitar repetição.",
+                                severidade = SeveridadeValidacao.AVISO
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -386,6 +392,8 @@ object RulesEngine {
         apresentadorId: Int?,
         ajudanteId: Int?,
         formato: FormatoParteEstudante,
+        tema: String,
+        isCustom: Boolean,
         pMap: Map<Int, Publicador>,
         regras: PainelRegrasConfig,
         semanaAtual: String,
@@ -399,6 +407,46 @@ object RulesEngine {
 
         val apr = pMap[apresentadorId]
         if (apr == null) return
+
+        // Trava para Temas Especiais / Formulários de Eventos
+        if (tema == "Discurso" || tema == "O que você diria?") {
+            if (apr.perfil == PerfilPublicador.IRMA) {
+                relatorios.add(
+                    RelatorioValidacao(
+                        tipoParte = parteKey,
+                        campo = campoDono,
+                        mensagem = "Parte $numEstudante: O tema '$tema' exige privilégio ministerial e é exclusivo para Irmãos (homens). A irmã ${apr.nome} não é elegível.",
+                        severidade = SeveridadeValidacao.ERRO
+                    )
+                )
+            }
+        }
+
+        if (tema == "O que você diria?") {
+            if (apr.perfil != PerfilPublicador.ANCIAO && apr.perfil != PerfilPublicador.SERVO_MINISTERIAL) {
+                relatorios.add(
+                    RelatorioValidacao(
+                        tipoParte = parteKey,
+                        campo = campoDono,
+                        mensagem = "Parte $numEstudante: O tema 'O que você diria?' possui restrição estrita regulamentar e exige designação de Ancião ou Servo Ministerial. ${apr.nome} (${apr.perfil}) não possui este privilégio.",
+                        severidade = SeveridadeValidacao.ERRO
+                    )
+                )
+            }
+        }
+
+        if (isCustom) {
+            if (apr.perfil != PerfilPublicador.ANCIAO && apr.perfil != PerfilPublicador.SERVO_MINISTERIAL) {
+                relatorios.add(
+                    RelatorioValidacao(
+                        tipoParte = parteKey,
+                        campo = campoDono,
+                        mensagem = "Parte $numEstudante: Ajustes e temas personalizados inseridos livremente possuem restrição estrita para Ancião ou Servo Ministerial no sistema. ${apr.nome} (${apr.perfil}) não é elegível.",
+                        severidade = SeveridadeValidacao.ERRO
+                    )
+                )
+            }
+        }
 
         // 1. Matriz geral de estudante
         if (!regras.matriz.allowedEstudanteApresentador.contains(apr.perfil)) {
