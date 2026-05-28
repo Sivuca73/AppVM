@@ -5,6 +5,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import java.io.File
+import java.io.FileOutputStream
+import android.content.Intent
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -168,7 +175,7 @@ class AppVMViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun insertPublicador(pub: Publicador) {
         coroutineScope.launch {
-            repository.insertPublicador(pub)
+            repository.savePublicadorWithMirroring(pub)
         }
     }
 
@@ -546,6 +553,7 @@ fun AgendaEsquemaTab(
     val context = LocalContext.current
     var selectedMonth by remember { mutableStateOf<Int?>(null) }
     var selectedWeekTuesdayDate by remember { mutableStateOf<String?>(null) }
+    var showVisualizacaoQuadro by remember { mutableStateOf(false) }
 
     var dialogSlotToSuggest by remember { mutableStateOf<String?>(null) }
     var dialogEstudanteFormato by remember { mutableStateOf<FormatoParteEstudante?>(null) }
@@ -688,12 +696,22 @@ fun AgendaEsquemaTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = { selectedWeekTuesdayDate = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
-                    shape = RoundedCornerShape(100.dp)
-                ) {
-                    Text("⬅ Voltar", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { selectedWeekTuesdayDate = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
+                        shape = RoundedCornerShape(100.dp)
+                    ) {
+                        Text("⬅ Voltar", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Button(
+                        onClick = { showVisualizacaoQuadro = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6750A4)),
+                        shape = RoundedCornerShape(100.dp)
+                    ) {
+                        Text("👁️ Ver Quadro", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
                 
                 Text(
@@ -1632,6 +1650,7 @@ fun AgendaEsquemaTab(
                     val rascunhada = gerarDesignacoesAutomaticamente(programacao, publicadores, regras)
                     onUpdateProg { rascunhada }
                     Toast.makeText(context, "Todos os campos preenchidos automaticamente para simulação!", Toast.LENGTH_SHORT).show()
+                    showVisualizacaoQuadro = true
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF6750A4).copy(alpha = 0.12f),
@@ -1650,6 +1669,7 @@ fun AgendaEsquemaTab(
                         val otimizada = gerarDesignacoesAutomaticamente(programacao, publicadores, regras)
                         onUpdateProg { otimizada }
                         Toast.makeText(context, "Designações calculadas e otimizadas seguindo as regras de rodízio e perfil!", Toast.LENGTH_SHORT).show()
+                        showVisualizacaoQuadro = true
                     }
                 },
                 enabled = todosCamposPreenchidos,
@@ -1711,6 +1731,14 @@ fun AgendaEsquemaTab(
                 dialogEstudanteFormato = null
                 dialogEstudanteApresentadorId = null
             }
+        )
+    }
+
+    if (showVisualizacaoQuadro) {
+        VisualizacaoQuadroDialog(
+            programacao = programacao,
+            publicadores = publicadores,
+            onDismiss = { showVisualizacaoQuadro = false }
         )
     }
 }
@@ -2488,6 +2516,7 @@ fun CadastroPublicadoresTab(
     onRestore: () -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var publicadorToEdit by remember { mutableStateOf<Publicador?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Row(
@@ -2507,7 +2536,10 @@ fun CadastroPublicadoresTab(
                 }
                 Spacer(modifier = Modifier.width(4.dp))
                 Button(
-                    onClick = { showAddDialog = true },
+                    onClick = { 
+                        publicadorToEdit = null
+                        showAddDialog = true 
+                    },
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
@@ -2535,7 +2567,11 @@ fun CadastroPublicadoresTab(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 4.dp)
+                            .clickable {
+                                publicadorToEdit = pub
+                                showAddDialog = true
+                            },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Row(
@@ -2563,7 +2599,14 @@ fun CadastroPublicadoresTab(
                                 if (pub.parentescos.isNotEmpty()) {
                                     val relativeNames = pub.parentescos.map { rel ->
                                         val parente = publicadores.find { it.id == rel.parenteId }
-                                        "${parente?.nome ?: "ID ${rel.parenteId}"} (${rel.grau})"
+                                        val grauTxt = when (rel.grau) {
+                                            GrauParentesco.CONJUGE -> "Cônjuge"
+                                            GrauParentesco.PAI -> "Pai"
+                                            GrauParentesco.MAE -> "Mãe"
+                                            GrauParentesco.FILHO_FILHA -> "Filho(a)"
+                                            GrauParentesco.IRMAO_IRMA -> "Irmão/Irmã"
+                                        }
+                                        "${parente?.nome ?: "ID ${rel.parenteId}"} ($grauTxt)"
                                     }
                                     Spacer(modifier = Modifier.height(3.dp))
                                     Text("Familiar (1º Grau): ${relativeNames.joinToString(", ")}", fontSize = 10.sp, color = Color(0xFFC2185B), fontWeight = FontWeight.SemiBold)
@@ -2583,10 +2626,15 @@ fun CadastroPublicadoresTab(
     if (showAddDialog) {
         AddPublicadorDialog(
             publicadores = publicadores,
-            onDismiss = { showAddDialog = false },
+            publicadorToEdit = publicadorToEdit,
+            onDismiss = { 
+                showAddDialog = false
+                publicadorToEdit = null
+            },
             onSave = { pub ->
                 onAdd(pub)
                 showAddDialog = false
+                publicadorToEdit = null
             }
         )
     }
@@ -2606,33 +2654,54 @@ fun ListItemTag(label: String, color: Color) {
 }
 
 // ==========================================
-// CADASTRAR PUBLICADOR - DIALOG POPUP
+// CADASTRAR/EDITAR PUBLICADOR - DIALOG POPUP (MÚLTIPLOS REBALSES)
 // ==========================================
 @Composable
 fun AddPublicadorDialog(
     publicadores: List<Publicador>,
+    publicadorToEdit: Publicador? = null,
     onDismiss: () -> Unit,
     onSave: (Publicador) -> Unit
 ) {
-    var nome by remember { mutableStateOf("") }
-    var genero by remember { mutableStateOf(Genero.MASCULINO) }
-    var perfil by remember { mutableStateOf(PerfilPublicador.IRMAO_BATIZADO) }
-    var servoDirigente by remember { mutableStateOf(false) }
+    var nome by remember { mutableStateOf(publicadorToEdit?.nome ?: "") }
+    var genero by remember { mutableStateOf(publicadorToEdit?.genero ?: Genero.MASCULINO) }
+    var perfil by remember { mutableStateOf(publicadorToEdit?.perfil ?: PerfilPublicador.IRMAO_BATIZADO) }
+    var servoDirigente by remember { mutableStateOf(publicadorToEdit?.servoDirigenteAprovado ?: false) }
     
-    // Parentesco simples
-    var parenteIdSelecionado by remember { mutableStateOf<Int?>(null) }
-    var grauParente by remember { mutableStateOf(GrauParentesco.CONJUGE) }
+    // Lista dinâmica de vínculos múltiplos
+    var parentescosList by remember { mutableStateOf(publicadorToEdit?.parentescos ?: emptyList<RelacaoParentesco>()) }
+    
+    // Formulário inline expansível para adicionar novo vínculo
+    var showFormAddRelacao by remember { mutableStateOf(false) }
+    var novoParenteId by remember { mutableStateOf<Int?>(null) }
+    var novoGrau by remember { mutableStateOf(GrauParentesco.CONJUGE) }
+    
+    var showParenteDropdown by remember { mutableStateOf(false) }
+
+    fun getGrauLabel(grau: GrauParentesco): String {
+        return when (grau) {
+            GrauParentesco.CONJUGE -> "Cônjuge"
+            GrauParentesco.PAI -> "Pai"
+            GrauParentesco.MAE -> "Mãe"
+            GrauParentesco.FILHO_FILHA -> "Filho(a)"
+            GrauParentesco.IRMAO_IRMA -> "Irmão/Irmã"
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Cadastrar Publicador", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (publicadorToEdit != null) "Editar Publicador" else "Cadastrar Publicador",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedTextField(
@@ -2693,47 +2762,153 @@ fun AddPublicadorDialog(
                 Divider()
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Parentesco Opcional
-                Text("Relacionamento de Isenção (1º Grau)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                var showParenteDropdown by remember { mutableStateOf(false) }
-                
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { showParenteDropdown = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val selecionado = publicadores.find { it.id == parenteIdSelecionado }
-                        Text(selecionado?.nome ?: "Sem vínculo familiar")
-                    }
-                    
-                    DropdownMenu(expanded = showParenteDropdown, onDismissRequest = { showParenteDropdown = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Sem vínculo familiar") },
-                            onClick = {
-                                parenteIdSelecionado = null
-                                showParenteDropdown = false
-                            }
-                        )
-                        publicadores.forEach { pub ->
-                            DropdownMenuItem(
-                                text = { Text(pub.nome) },
-                                onClick = {
-                                    parenteIdSelecionado = pub.id
-                                    showParenteDropdown = false
+                // VÍNCULOS FAMILIARES MÚLTIPLOS (SEÇÃO DINÂMICA)
+                Text("Vínculos Familiares Múltiplos (1º Grau)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFC2185B))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (parentescosList.isEmpty()) {
+                    Text(
+                        text = "Nenhum vínculo familiar cadastrado. Adicione para evitar conflitos de reunião.",
+                        fontSize = 10.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                } else {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        parentescosList.forEach { rel ->
+                            val parente = publicadores.find { it.id == rel.parenteId }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFFFF0F2))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Text("🤝", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(parente?.nome ?: "ID: ${rel.parenteId}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC2185B))
+                                        Text(getGrauLabel(rel.grau), fontSize = 10.sp, color = Color.Gray)
+                                    }
                                 }
-                            )
+                                IconButton(
+                                    onClick = {
+                                        parentescosList = parentescosList.filter { it.parenteId != rel.parenteId }
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Remover Vínculo", tint = Color(0xFFC62828), modifier = Modifier.size(14.dp))
+                                }
+                            }
                         }
                     }
                 }
 
-                if (parenteIdSelecionado != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("Tipo de Vínculo Familiar", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Column {
-                        GrauParentesco.values().forEach { gp ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = grauParente == gp, onClick = { grauParente = gp })
-                                Text(gp.name, fontSize = 11.sp)
+                // Expandir formulário de novo vínculo
+                if (!showFormAddRelacao) {
+                    OutlinedButton(
+                        onClick = { showFormAddRelacao = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, Color(0xFFC2185B)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC2185B)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Adicionar Vínculo Familiar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5F7)),
+                        border = BorderStroke(1.dp, Color(0xFFFFD1DC))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Novo Vínculo", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC2185B))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(
+                                    onClick = { showParenteDropdown = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    val selecionado = publicadores.find { it.id == novoParenteId }
+                                    Text(selecionado?.nome ?: "Selecionar Parente", fontSize = 12.sp)
+                                }
+                                
+                                val elegiveis = publicadores.filter { 
+                                    it.id != (publicadorToEdit?.id ?: 0) && parentescosList.none { rel -> rel.parenteId == it.id }
+                                }
+                                
+                                DropdownMenu(expanded = showParenteDropdown, onDismissRequest = { showParenteDropdown = false }) {
+                                    if (elegiveis.isEmpty()) {
+                                        DropdownMenuItem(text = { Text("Nenhum irmão elegível") }, onClick = {})
+                                    } else {
+                                        elegiveis.forEach { pub ->
+                                            DropdownMenuItem(
+                                                text = { Text(pub.nome) },
+                                                onClick = {
+                                                    novoParenteId = pub.id
+                                                    showParenteDropdown = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Grau de Parentesco", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                            
+                            Column {
+                                GrauParentesco.values().forEach { gp ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().clickable { novoGrau = gp }
+                                    ) {
+                                        RadioButton(
+                                            selected = novoGrau == gp,
+                                            onClick = { novoGrau = gp },
+                                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFC2185B))
+                                        )
+                                        Text(getGrauLabel(gp), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { 
+                                        showFormAddRelacao = false
+                                        novoParenteId = null
+                                    }
+                                ) {
+                                    Text("Cancelar", fontSize = 11.sp)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (novoParenteId != null) {
+                                            parentescosList = parentescosList + RelacaoParentesco(novoParenteId!!, novoGrau)
+                                            novoParenteId = null
+                                            showFormAddRelacao = false
+                                        }
+                                    },
+                                    enabled = novoParenteId != null,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC2185B)),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("Confirmar", fontSize = 11.sp)
+                                }
                             }
                         }
                     }
@@ -2747,23 +2922,20 @@ fun AddPublicadorDialog(
                     Button(
                         onClick = {
                             if (nome.isNotEmpty()) {
-                                val rel = if (parenteIdSelecionado != null) {
-                                    listOf(RelacaoParentesco(parenteIdSelecionado!!, grauParente))
-                                } else emptyList()
-                                
                                 onSave(
                                     Publicador(
-                                        id = 0, // Auto gera
+                                        id = publicadorToEdit?.id ?: 0,
                                         nome = nome,
                                         genero = genero,
                                         perfil = perfil,
                                         servoDirigenteAprovado = servoDirigente,
-                                        parentescos = rel,
-                                        historicoPartes = emptyList()
+                                        parentescos = parentescosList,
+                                        historicoPartes = publicadorToEdit?.historicoPartes ?: emptyList()
                                     )
                                 )
                             }
-                        }
+                        },
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Salvar")
                     }
@@ -3327,5 +3499,517 @@ fun RuleStatusIndicator(label: String, active: Boolean) {
                 color = if (active) Color(0xFF43A047) else Color(0xFF78909C)
             )
         }
+    }
+}
+
+// =========================================================================
+// TELA E RECURSOS DE VISUALIZAÇÃO DA FOLHA DO QUADRO E EXPORTAÇÃO (PDF / MS WORD)
+// =========================================================================
+
+fun exportarPdfAgenda(
+    context: android.content.Context,
+    prog: ProgramacaoSemana,
+    publicadores: List<Publicador>
+) {
+    try {
+        val pdfDocument = PdfDocument()
+        // Page info: A4 size is roughly 595 x 842 points (72 points per inch)
+        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val page = pdfDocument.startPage(pageInfo)
+        val canvas: Canvas = page.canvas
+        
+        val paint = Paint()
+        paint.isAntiAlias = true
+        
+        // Background white
+        paint.color = android.graphics.Color.WHITE
+        canvas.drawRect(0f, 0f, 595f, 842f, paint)
+        
+        // Helper to find names
+        fun getNome(id: Int?): String = publicadores.find { it.id == id }?.nome ?: "---"
+        
+        // Draw Header
+        paint.color = android.graphics.Color.parseColor("#37474F")
+        paint.textSize = 15f
+        paint.isFakeBoldText = true
+        canvas.drawText("PROGRAMAÇÃO DA REUNIÃO VIDA E MINISTÉRIO CRISTÃOS", 40f, 60f, paint)
+        
+        paint.textSize = 12f
+        paint.isFakeBoldText = false
+        canvas.drawText("Semana de: ${prog.semana}", 40f, 85f, paint)
+        
+        // Draw Presidente and Oração Inicial
+        canvas.drawText("Presidente: ${getNome(prog.presidenteId)}", 40f, 115f, paint)
+        canvas.drawText("Oração Inicial: ${getNome(prog.oracaoInicialId)}", 40f, 131f, paint)
+        
+        var y = 170f
+        
+        // Section: TESOUROS
+        paint.color = android.graphics.Color.parseColor("#34727D")
+        paint.textSize = 12f
+        paint.isFakeBoldText = true
+        canvas.drawText("TESOUROS DA PALAVRA DE DEUS", 40f, y, paint)
+        y += 5f
+        paint.strokeWidth = 2f
+        canvas.drawLine(40f, y, 555f, y, paint)
+        y += 18f
+        
+        paint.color = android.graphics.Color.BLACK
+        paint.textSize = 11f
+        paint.isFakeBoldText = false
+        canvas.drawText("• Discurso de 10 min: ${getNome(prog.tesourosDiscursoId)}", 50f, y, paint)
+        y += 16f
+        canvas.drawText("• Joias Espirituais: ${getNome(prog.tesourosJoiasId)}", 50f, y, paint)
+        y += 16f
+        canvas.drawText("• Leitura da Bíblia: ${getNome(prog.tesourosLeituraId)}", 50f, y, paint)
+        y += 30f
+        
+        // Section: FAÇA SEU MELHOR
+        paint.color = android.graphics.Color.parseColor("#BE9F67")
+        paint.textSize = 12f
+        paint.isFakeBoldText = true
+        canvas.drawText("FAÇA SEU MELHOR NO MINISTÉRIO", 40f, y, paint)
+        y += 5f
+        canvas.drawLine(40f, y, 555f, y, paint)
+        y += 18f
+        
+        paint.color = android.graphics.Color.BLACK
+        paint.textSize = 11f
+        paint.isFakeBoldText = false
+        
+        // Render students
+        val card1 = "Parte 1 (${prog.facaSeuMelhorCard1Tema}):"
+        canvas.drawText("• $card1 Estudante: ${getNome(prog.estudante1ApresentadorId)} ${if (prog.estudante1AjudanteId != null) " / Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}", 50f, y, paint)
+        y += 16f
+        
+        val opt = prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+        if (opt >= 2) {
+            val card2 = "Parte 2 (${prog.facaSeuMelhorCard2Tema}):"
+            canvas.drawText("• $card2 Estudante: ${getNome(prog.estudante2ApresentadorId)} ${if (prog.estudante2AjudanteId != null) " / Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}", 50f, y, paint)
+            y += 16f
+        }
+        if (opt >= 3) {
+            val card3 = "Parte 3 (${prog.facaSeuMelhorCard3Tema}):"
+            canvas.drawText("• $card3 Estudante: ${getNome(prog.estudante3ApresentadorId)} ${if (prog.estudante3AjudanteId != null) " / Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}", 50f, y, paint)
+            y += 16f
+        }
+        if (opt >= 4) {
+            val card4 = "Parte 4 (${prog.facaSeuMelhorCard4Tema}):"
+            canvas.drawText("• $card4 Estudante: ${getNome(prog.estudante4ApresentadorId)} ${if (prog.estudante4AjudanteId != null) " / Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}", 50f, y, paint)
+            y += 16f
+        }
+        y += 14f
+        
+        // Section: VIDA CRISTÃ
+        paint.color = android.graphics.Color.parseColor("#912421")
+        paint.textSize = 12f
+        paint.isFakeBoldText = true
+        canvas.drawText("NOSSA VIDA CRISTÃ", 40f, y, paint)
+        y += 5f
+        canvas.drawLine(40f, y, 555f, y, paint)
+        y += 18f
+        
+        paint.color = android.graphics.Color.BLACK
+        paint.textSize = 11f
+        paint.isFakeBoldText = false
+        
+        canvas.drawText("• Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min): ${getNome(prog.vidaParteLocal1Id)}", 50f, y, paint)
+        y += 16f
+        if (prog.vidaPartesQuantidade >= 2) {
+            canvas.drawText("• Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min): ${getNome(prog.vidaParteLocal2Id)}", 50f, y, paint)
+            y += 16f
+        }
+        
+        if (prog.tipoSemana != "VISITA_SC") {
+            canvas.drawText("• Estudo Bíblico (Dirigente): ${getNome(prog.vidaEstudoDirigenteId)}", 50f, y, paint)
+            y += 16f
+            canvas.drawText("• Estudo Bíblico (Leitor): ${getNome(prog.vidaEstudoLeitorId)}", 50f, y, paint)
+            y += 16f
+        } else {
+            canvas.drawText("• Discurso de Serviço do Viajante SC: ${prog.visitaNomeViajante}", 50f, y, paint)
+            y += 16f
+            canvas.drawText("• Tema: ${prog.visitaTemaDiscurso}", 50f, y, paint)
+            y += 16f
+        }
+        
+        canvas.drawText("• Oração Final: ${getNome(prog.oracaoFinalId)}", 50f, y, paint)
+        
+        pdfDocument.finishPage(page)
+        
+        // Write PDF file
+        val cachePath = File(context.cacheDir, "documents")
+        cachePath.mkdirs()
+        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana}.pdf")
+        val fileOutputStream = FileOutputStream(file)
+        pdfDocument.writeTo(fileOutputStream)
+        pdfDocument.close()
+        fileOutputStream.close()
+        
+        // Share Intent
+        val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações - Reunião ${prog.semana}")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Salvar/Compartilhar PDF"))
+    } catch(e: Exception) {
+        e.printStackTrace()
+        Toast.makeText(context, "Erro ao gerar PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun exportarWordAgenda(
+    context: android.content.Context,
+    prog: ProgramacaoSemana,
+    publicadores: List<Publicador>
+) {
+    try {
+        fun getNome(id: Int?): String = publicadores.find { it.id == id }?.nome ?: "---"
+        
+        val htmlContent = """
+            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+            <head>
+                <meta charset="utf-8">
+                <title>Programação da Reunião Vida e Ministério</title>
+                <style>
+                    body { font-family: 'Calibri', 'Arial', sans-serif; color: #333333; }
+                    h1 { color: #37474F; font-size: 16pt; margin-bottom: 5px; }
+                    .semana { font-size: 11pt; color: #555555; margin-bottom: 20px; font-weight: bold; }
+                    .section-title { font-size: 13pt; font-weight: bold; padding: 4px; margin-top: 15px; border-bottom: 2px solid; }
+                    .tesouros { color: #34727D; border-color: #34727D; }
+                    .facamelhor { color: #BE9F67; border-color: #BE9F67; }
+                    .vidacrista { color: #912421; border-color: #912421; }
+                    .item { font-size: 11pt; margin: 8px 0; padding-left: 10px; }
+                    .bold { font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <h1>PROGRAMAÇÃO DA REUNIÃO VIDA E MINISTÉRIO CRISTÃOS</h1>
+                <div class="semana">Semana de: ${prog.semana}</div>
+                
+                <div class="item"><span class="bold">Presidente:</span> ${getNome(prog.presidenteId)}</div>
+                <div class="item"><span class="bold">Oração Inicial:</span> ${getNome(prog.oracaoInicialId)}</div>
+                
+                <div class="section-title tesouros">TESOUROS DA PALAVRA DE DEUS</div>
+                <div class="item"><span class="bold">Discurso de 10 min:</span> ${getNome(prog.tesourosDiscursoId)}</div>
+                <div class="item"><span class="bold">Joias Espirituais:</span> ${getNome(prog.tesourosJoiasId)}</div>
+                <div class="item"><span class="bold">Leitura da Bíblia:</span> ${getNome(prog.tesourosLeituraId)}</div>
+                
+                <div class="section-title facamelhor">FAÇA SEU MELHOR NO MINISTÉRIO</div>
+                <div class="item"><span class="bold">Parte 1 (${prog.facaSeuMelhorCard1Tema}):</span> Estudante: ${getNome(prog.estudante1ApresentadorId)} ${if (prog.estudante1AjudanteId != null) " | Ajudante: " + getNome(prog.estudante1AjudanteId) else ""}</div>
+                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 2) """<div class="item"><span class="bold">Parte 2 (${prog.facaSeuMelhorCard2Tema}):</span> Estudante: ${getNome(prog.estudante2ApresentadorId)} ${if (prog.estudante2AjudanteId != null) " | Ajudante: " + getNome(prog.estudante2AjudanteId) else ""}</div>""" else ""}
+                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 3) """<div class="item"><span class="bold">Parte 3 (${prog.facaSeuMelhorCard3Tema}):</span> Estudante: ${getNome(prog.estudante3ApresentadorId)} ${if (prog.estudante3AjudanteId != null) " | Ajudante: " + getNome(prog.estudante3AjudanteId) else ""}</div>""" else ""}
+                ${if ((prog.facaSeuMelhorOpcao.toIntOrNull() ?: 3) >= 4) """<div class="item"><span class="bold">Parte 4 (${prog.facaSeuMelhorCard4Tema}):</span> Estudante: ${getNome(prog.estudante4ApresentadorId)} ${if (prog.estudante4AjudanteId != null) " | Ajudante: " + getNome(prog.estudante4AjudanteId) else ""}</div>""" else ""}
+
+                <div class="section-title vidacrista">NOSSA VIDA CRISTÃ</div>
+                <div class="item"><span class="bold">Parte Local 1 (${prog.vidaParteLocal1DuracaoMin} min):</span> ${getNome(prog.vidaParteLocal1Id)}</div>
+                ${if (prog.vidaPartesQuantidade >= 2) """<div class="item"><span class="bold">Parte Local 2 (${prog.vidaParteLocal2DuracaoMin} min):</span> ${getNome(prog.vidaParteLocal2Id)}</div>""" else ""}
+                
+                ${if (prog.tipoSemana != "VISITA_SC") """
+                    <div class="item"><span class="bold">Estudo Bíblico de Congregação (Dirigente):</span> ${getNome(prog.vidaEstudoDirigenteId)}</div>
+                    <div class="item"><span class="bold">Estudo Bíblico de Congregação (Leitor):</span> ${getNome(prog.vidaEstudoLeitorId)}</div>
+                """ else """
+                    <div class="item"><span class="bold">Discurso de Serviço - Viajante:</span> ${prog.visitaNomeViajante}</div>
+                    <div class="item"><span class="bold">Tema:</span> ${prog.visitaTemaDiscurso}</div>
+                """}
+                
+                <div class="item"><span class="bold">Oração Final:</span> ${getNome(prog.oracaoFinalId)}</div>
+            </body>
+            </html>
+        """.trimIndent()
+        
+        // Write .doc file (Word reads HTML seamlessly if extension is .doc/.docx)
+        val cachePath = File(context.cacheDir, "documents")
+        cachePath.mkdirs()
+        val file = File(cachePath, "Programacao_Vida_Ministerio_${prog.semana}.doc")
+        val fileOutputStream = FileOutputStream(file)
+        fileOutputStream.write(htmlContent.toByteArray(Charsets.UTF_8))
+        fileOutputStream.close()
+        
+        // Share Intent
+        val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/msword"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "Folha de Designações (Word DOC) - Reunião ${prog.semana}")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Salvar/Compartilhar Word Document"))
+    } catch(e: Exception) {
+        e.printStackTrace()
+        Toast.makeText(context, "Erro ao gerar arquivo Word: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+fun VisualizacaoQuadroDialog(
+    programacao: ProgramacaoSemana,
+    publicadores: List<Publicador>,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    
+    fun getNome(id: Int?): String {
+        return publicadores.find { it.id == id }?.nome ?: "---"
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 16.dp, horizontal = 8.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                // Barra de Ações (Topo)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.Gray)
+                    }
+                    
+                    Text(
+                        text = "Folha do Quadro",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF37474F)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+
+                // Corpo da Programação (Semelhante a folha física impressa)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    // TÍTULO DA REUNIÃO (PADRÃO SALA DO REINO)
+                    Text(
+                        text = "PROGRAMAÇÃO DA REUNIÃO",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "NOSSA VIDA E MINISTÉRIO CRISTÃO",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF263238),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    // Semana da Reunião
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFECEFF1))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "SEMANA DE: ${programacao.semana}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF37474F)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Presidência e Oração Inicial
+                    QuadroRow(label = "Presidente", value = getNome(programacao.presidenteId))
+                    QuadroRow(label = "Oração Inicial", value = getNome(programacao.oracaoInicialId))
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // SEÇÃO 1: TESOUROS DA PALAVRA DE DEUS (#34727D)
+                    QuadroSectionHeader(title = "TESOUROS DA PALAVRA DE DEUS", color = Color(0xFF34727D))
+                    QuadroRow(label = "Discurso (10 min)", value = getNome(programacao.tesourosDiscursoId))
+                    QuadroRow(label = "Joias Espirituais (10 min)", value = getNome(programacao.tesourosJoiasId))
+                    QuadroRow(label = "Leitura da Bíblia (4 min)", value = getNome(programacao.tesourosLeituraId))
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // SEÇÃO 2: FAÇA SEU MELHOR NO MINISTÉRIO (#BE9F67)
+                    QuadroSectionHeader(title = "FAÇA SEU MELHOR NO MINISTÉRIO", color = Color(0xFFBE9F67))
+                    
+                    val opt = programacao.facaSeuMelhorOpcao.toIntOrNull() ?: 3
+                    
+                    QuadroEstudanteRow(nomeAmigavel = "Parte 1 (${programacao.facaSeuMelhorCard1Tema})", estudante = getNome(programacao.estudante1ApresentadorId), ajudante = getNome(programacao.estudante1AjudanteId))
+                    if (opt >= 2) {
+                        QuadroEstudanteRow(nomeAmigavel = "Parte 2 (${programacao.facaSeuMelhorCard2Tema})", estudante = getNome(programacao.estudante2ApresentadorId), ajudante = getNome(programacao.estudante2AjudanteId))
+                    }
+                    if (opt >= 3) {
+                        QuadroEstudanteRow(nomeAmigavel = "Parte 3 (${programacao.facaSeuMelhorCard3Tema})", estudante = getNome(programacao.estudante3ApresentadorId), ajudante = getNome(programacao.estudante3AjudanteId))
+                    }
+                    if (opt >= 4) {
+                        QuadroEstudanteRow(nomeAmigavel = "Parte 4 (${programacao.facaSeuMelhorCard4Tema})", estudante = getNome(programacao.estudante4ApresentadorId), ajudante = getNome(programacao.estudante4AjudanteId))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // SEÇÃO 3: NOSSA VIDA CRISTÃ (#912421)
+                    QuadroSectionHeader(title = "NOSSA VIDA CRISTÃ", color = Color(0xFF912421))
+                    
+                    QuadroRow(label = "Parte Local 1 (${programacao.vidaParteLocal1DuracaoMin} min): ${programacao.vidaParteLocal1Tema}", value = getNome(programacao.vidaParteLocal1Id))
+                    if (programacao.vidaPartesQuantidade >= 2) {
+                        QuadroRow(label = "Parte Local 2 (${programacao.vidaParteLocal2DuracaoMin} min): ${programacao.vidaParteLocal2Tema}", value = getNome(programacao.vidaParteLocal2Id))
+                    }
+                    
+                    if (programacao.tipoSemana != "VISITA_SC") {
+                        QuadroRow(label = "Estudo Bíblico de Congregação (Dirigente)", value = getNome(programacao.vidaEstudoDirigenteId))
+                        QuadroRow(label = "Estudo Bíblico de Congregação (Leitor)", value = getNome(programacao.vidaEstudoLeitorId))
+                    } else {
+                        QuadroRow(label = "Discurso de Serviço do Viajante (SC)", value = programacao.visitaNomeViajante)
+                        QuadroRow(label = "Tema do Discurso", value = programacao.visitaTemaDiscurso)
+                    }
+                    
+                    QuadroRow(label = "Oração Final", value = getNome(programacao.oracaoFinalId))
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Botões de Exportação Rápidos
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Button(
+                        onClick = { exportarPdfAgenda(context, programacao, publicadores) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)), // Vermelho PDF
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 4.dp)
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Share, null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Exportar PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    
+                    Button(
+                        onClick = { exportarWordAgenda(context, programacao, publicadores) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)), // Azul Word
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp)
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Exportar Word", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuadroSectionHeader(title: String, color: Color) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(16.dp)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+        Divider(color = color.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+    }
+}
+
+@Composable
+fun QuadroRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF37474F),
+            modifier = Modifier.weight(1.3f)
+        )
+        Text(
+            text = value,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1565C0), 
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
+    }
+    Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
+}
+
+@Composable
+fun QuadroEstudanteRow(nomeAmigavel: String, estudante: String, ajudante: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = nomeAmigavel,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF37474F)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(modifier = Modifier.weight(1f)) {
+                Text("Estudante: ", fontSize = 10.sp, color = Color.Gray)
+                Text(estudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
+            }
+            if (ajudante != "---" && ajudante.isNotEmpty()) {
+                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
+                    Text("Ajudante: ", fontSize = 10.sp, color = Color.Gray)
+                    Text(ajudante, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
+                }
+            }
+        }
+        Divider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
     }
 }

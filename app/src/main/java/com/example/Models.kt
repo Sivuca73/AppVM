@@ -26,7 +26,9 @@ enum class Genero {
  */
 enum class GrauParentesco {
     CONJUGE,
-    PAI_FILHO, // Pai/Filha ou Mãe/Filho
+    PAI,
+    MAE,
+    FILHO_FILHA,
     IRMAO_IRMA
 }
 

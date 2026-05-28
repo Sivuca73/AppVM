@@ -85,6 +85,9 @@ interface PublicadorDao {
     @Query("SELECT * FROM publicadores ORDER BY nome ASC")
     fun getAllPublicadores(): Flow<List<PublicadorEntity>>
 
+    @Query("SELECT * FROM publicadores")
+    suspend fun getAllPublicadoresList(): List<PublicadorEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPublicador(publicador: PublicadorEntity): Long
 
@@ -186,7 +189,7 @@ class AppRepository(private val db: AppDatabase) {
         regrasConfigDao.saveRegrasConfig(RegrasConfigEntity(configJson = json))
     }
 
-    suspend fun insertPublicador(pub: Publicador) {
+    suspend fun insertPublicador(pub: Publicador): Int {
         val entity = PublicadorEntity(
             id = pub.id,
             nome = pub.nome,
@@ -196,11 +199,84 @@ class AppRepository(private val db: AppDatabase) {
             parentescosJson = parentescosAdapter.toJson(pub.parentescos),
             historicoPartesJson = historicoAdapter.toJson(pub.historicoPartes)
         )
-        publicadorDao.insertPublicador(entity)
+        val generatedId = publicadorDao.insertPublicador(entity).toInt()
+        return if (pub.id == 0) generatedId else pub.id
+    }
+
+    suspend fun savePublicadorWithMirroring(pub: Publicador): Int {
+        // 1. Salva/Insere o publicador principal
+        val actualId = insertPublicador(pub)
+        val updatedPub = pub.copy(id = actualId)
+        
+        // 2. Busca lista atualizada de todos da congregação no banco
+        val allEntities = publicadorDao.getAllPublicadoresList()
+        val allPubs = allEntities.map { entity ->
+            Publicador(
+                id = entity.id,
+                nome = entity.nome,
+                genero = try { Genero.valueOf(entity.genero) } catch(e: Exception) { Genero.MASCULINO },
+                perfil = try { PerfilPublicador.valueOf(entity.perfil) } catch(e: Exception) { PerfilPublicador.IRMAO_BATIZADO },
+                servoDirigenteAprovado = entity.servoDirigenteAprovado,
+                parentescos = try { parentescosAdapter.fromJson(entity.parentescosJson) ?: emptyList() } catch(e: Exception) { emptyList() },
+                historicoPartes = try { historicoAdapter.fromJson(entity.historicoPartesJson) ?: emptyList() } catch(e: Exception) { emptyList() }
+            )
+        }
+        
+        // 3. Aplica espelhamento mútuo de relacionamentos bidirecionais
+        for (other in allPubs) {
+            if (other.id == actualId) continue
+            
+            // Verifica se o outro está nos vínculos dinâmicos de pub
+            val directRel = updatedPub.parentescos.find { it.parenteId == other.id }
+            
+            // Limpa vínculo antigo de other para actualId
+            val newOtherParentescos = other.parentescos.filter { it.parenteId != actualId }.toMutableList()
+            
+            if (directRel != null) {
+                // Determina relação de volta baseada no gênero e grau
+                val invGrau = when (directRel.grau) {
+                    GrauParentesco.CONJUGE -> GrauParentesco.CONJUGE
+                    GrauParentesco.IRMAO_IRMA -> GrauParentesco.IRMAO_IRMA
+                    GrauParentesco.PAI -> GrauParentesco.FILHO_FILHA
+                    GrauParentesco.MAE -> GrauParentesco.FILHO_FILHA
+                    GrauParentesco.FILHO_FILHA -> {
+                        if (updatedPub.genero == Genero.MASCULINO) GrauParentesco.PAI else GrauParentesco.MAE
+                    }
+                }
+                newOtherParentescos.add(RelacaoParentesco(actualId, invGrau))
+            }
+            
+            // Se mudou algo, persiste a outra pessoa
+            if (newOtherParentescos != other.parentescos) {
+                val updatedOther = other.copy(parentescos = newOtherParentescos)
+                val otherEntity = PublicadorEntity(
+                    id = updatedOther.id,
+                    nome = updatedOther.nome,
+                    genero = updatedOther.genero.name,
+                    perfil = updatedOther.perfil.name,
+                    servoDirigenteAprovado = updatedOther.servoDirigenteAprovado,
+                    parentescosJson = parentescosAdapter.toJson(updatedOther.parentescos),
+                    historicoPartesJson = historicoAdapter.toJson(updatedOther.historicoPartes)
+                )
+                publicadorDao.insertPublicador(otherEntity)
+            }
+        }
+        return actualId
     }
 
     suspend fun deletePublicador(id: Int) {
         publicadorDao.deletePublicadorById(id)
+        
+        // Limpa referências órfãs de quem ligava com o excluído
+        val allEntities = publicadorDao.getAllPublicadoresList()
+        for (entity in allEntities) {
+            val parentescosList = try { parentescosAdapter.fromJson(entity.parentescosJson) ?: emptyList() } catch(e: Exception) { emptyList() }
+            if (parentescosList.any { it.parenteId == id }) {
+                val updated = parentescosList.filter { it.parenteId != id }
+                val updatedEntity = entity.copy(parentescosJson = parentescosAdapter.toJson(updated))
+                publicadorDao.insertPublicador(updatedEntity)
+            }
+        }
     }
     
     suspend fun clearAllPublicadores() {
@@ -280,7 +356,7 @@ class AppRepository(private val db: AppDatabase) {
             nome = "André Souza",
             genero = Genero.MASCULINO,
             perfil = PerfilPublicador.IRMAO_NAO_BATIZADO,
-            parentescos = listOf(RelacaoParentesco(9, GrauParentesco.PAI_FILHO)),
+            parentescos = listOf(RelacaoParentesco(9, GrauParentesco.MAE)),
             historicoPartes = emptyList()
         )
 
@@ -290,7 +366,7 @@ class AppRepository(private val db: AppDatabase) {
             nome = "Alice Souza",
             genero = Genero.FEMININO,
             perfil = PerfilPublicador.IRMA,
-            parentescos = listOf(RelacaoParentesco(6, GrauParentesco.PAI_FILHO)), // Mútua do André
+            parentescos = listOf(RelacaoParentesco(6, GrauParentesco.FILHO_FILHA)), // Mútua do André
             historicoPartes = listOf(
                 RegistroHistorico("2026-05-28", "MINISTERIO_ESTUDANTE_2", "AJUDANTE", 10) // Foi ajudante semana passada
             )
